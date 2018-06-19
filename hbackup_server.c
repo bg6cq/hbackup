@@ -41,7 +41,7 @@ char config_file[MAXLEN];
 char work_user[MAXLEN];
 int work_uid;
 
-char * get_file_md5sum(char *file_name)
+char *get_file_md5sum(char *file_name)
 {
 	int n;
 	MD5_CTX c;
@@ -53,29 +53,30 @@ char * get_file_md5sum(char *file_name)
 	static char outhex[64];
 
 	MD5_Init(&c);
-	fp = fopen(file_name,"r");
-	if(fp==NULL) {
-		outhex[0]=0;
-		return (char *) outhex;
+	fp = fopen(file_name, "r");
+	if (fp == NULL) {
+		outhex[0] = 0;
+		return (char *)outhex;
 	}
-		
-	bytes=fread(buf,1, 512, fp);
-	
-	while(bytes > 0) {
-        	MD5_Update(&c, buf, bytes);
-        	bytes=fread(buf,1, 512, fp);
-    	}
 
-    	MD5_Final(out, &c);
+	bytes = fread(buf, 1, 512, fp);
+
+	while (bytes > 0) {
+		MD5_Update(&c, buf, bytes);
+		bytes = fread(buf, 1, 512, fp);
+	}
+
+	MD5_Final(out, &c);
 	fclose(fp);
-	outhex[0]=0;
-    	for(n=0; n<MD5_DIGEST_LENGTH; n++) {
-        	snprintf(outhex+n*2,3,"%02x", out[n]);
+	outhex[0] = 0;
+	for (n = 0; n < MD5_DIGEST_LENGTH; n++) {
+		snprintf(outhex + n * 2, 3, "%02x", out[n]);
 	}
 
-    	if(debug) fprintf(stderr,"md5sum of file %s is %s\n",file_name,outhex);
+	if (debug)
+		fprintf(stderr, "md5sum of file %s is %s\n", file_name, outhex);
 
-    	return(outhex); 
+	return (outhex);
 }
 
 void err_doit(int errnoflag, int level, const char *fmt, va_list ap)
@@ -335,11 +336,11 @@ int bind_and_listen(void)
 	return listenfd;
 }
 
-char * get_hashed_file_name(char * md5sum, size_t file_len)
+char *get_hashed_file_name(char *md5sum, size_t file_len)
 {
 	static char hashed_file_name[MAXLEN];
 	snprintf(hashed_file_name, MAXLEN, "/hashed_file/%c%c/%c%c/%s_%zu",
-		md5sum[0], md5sum[1], md5sum[2], md5sum[3], md5sum, file_len);
+		 md5sum[0], md5sum[1], md5sum[2], md5sum[3], md5sum, file_len);
 	return hashed_file_name;
 }
 
@@ -375,14 +376,15 @@ void check_and_create_dir(char *file_name)
 		}
 	}
 }
-void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_len)
+
+void RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len)
 {
 	char buf[MAXLEN];
 	char file_name[MAXLEN];
 	size_t file_got = 0;
 	int n;
-	
-	strcpy(buf,"DATA I need your data\n");
+
+	strcpy(buf, "DATA I need your data\n");
 	Writen(fd, buf, strlen(buf));
 	snprintf(file_name, MAXLEN, "/hashed_file/tmp.%d", getpid());
 	check_and_create_dir(file_name);
@@ -390,8 +392,8 @@ void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_l
 	if (fp == NULL) {
 		snprintf(buf, MAXLEN, "ERROR open tmpfile %s for write\n", file_name);
 		Writen(fd, buf, strlen(buf));
-		if(debug)
-			fprintf(stderr,"%s",buf);
+		if (debug)
+			fprintf(stderr, "%s", buf);
 		exit(-1);
 	}
 	if (debug)
@@ -411,8 +413,8 @@ void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_l
 			unlink(file_name);
 			snprintf(buf, 100, "ERROR file length %zu\n", file_got);
 			Writen(fd, buf, strlen(buf));
-			if(debug)
-				fprintf(stderr,"%s",buf);
+			if (debug)
+				fprintf(stderr, "%s", buf);
 			exit(-1);
 		}
 		if (fwrite(buf, 1, n, fp) != n) {
@@ -420,29 +422,29 @@ void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_l
 			unlink(file_name);
 			strcpy(buf, "ERROR file write\n");
 			Writen(fd, buf, strlen(buf));
-			if(debug)
-				fprintf(stderr,"%s",buf);
+			if (debug)
+				fprintf(stderr, "%s", buf);
 			exit(-1);
 		}
 		if (debug)
 			fprintf(stderr, "write %zu of %zu\n", file_got, file_len);
 	}
 	fclose(fp);
-	fprintf(stderr,"md5sum :%s:\n",md5sum);
-	fprintf(stderr,"md5sum :%s:(new_file)\n",get_file_md5sum(file_name));
-	if(memcmp(md5sum, get_file_md5sum(file_name), 32)!=0) {
+	fprintf(stderr, "md5sum :%s:\n", md5sum);
+	fprintf(stderr, "md5sum :%s:(new_file)\n", get_file_md5sum(file_name));
+	if (memcmp(md5sum, get_file_md5sum(file_name), 32) != 0) {
 		unlink(file_name);
 		strcpy(buf, "ERROR file md5sum\n");
 		Writen(fd, buf, strlen(buf));
-		if(debug)
-			fprintf(stderr,"%s",buf);
+		if (debug)
+			fprintf(stderr, "%s", buf);
 		exit(-1);
-	}	
+	}
 	check_and_create_dir(hashed_file_name);
 	n = rename(file_name, hashed_file_name);
-	if(n==0) 
+	if (n == 0)
 		return;
-	
+
 	unlink(file_name);
 	snprintf(buf, 100, "ERROR rename uploaded file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
@@ -453,7 +455,8 @@ void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_l
 
 size_t total_file_len, upload_file_len;
 
-void ProcessFile(int fd) {
+void ProcessFile(int fd)
+{
 	char buf[MAXLEN];
 	char file_name[MAXLEN];
 	char hashed_file[MAXLEN];
@@ -464,19 +467,18 @@ void ProcessFile(int fd) {
 
 	n = Readline(fd, buf, MAXLEN);
 	buf[n] = 0;
-	if (memcmp(buf, "END\n", 4) == 0){ 	// END all
-		snprintf(buf,MAXLEN, "BYE %zu of %zu\n", upload_file_len, total_file_len);
+	if (memcmp(buf, "END\n", 4) == 0) {	// END all
+		snprintf(buf, MAXLEN, "BYE %zu of %zu\n", upload_file_len, total_file_len);
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
 		exit(0);
 	}
-
 // C -> FILE md5sum file_len file_name\n
 //
-	if (memcmp(buf, "FILE ", 5) != 0){	// FILE file_name [file_len]
-		if(debug) 
-			fprintf(stderr,"%s unknow cmd\n", buf);
+	if (memcmp(buf, "FILE ", 5) != 0) {	// FILE file_name [file_len]
+		if (debug)
+			fprintf(stderr, "%s unknow cmd\n", buf);
 		exit(-1);
 	}
 	if (buf[strlen(buf) - 1] == '\n')
@@ -485,43 +487,44 @@ void ProcessFile(int fd) {
 	while (*p && (*p != ' '))
 		p++;
 	if (*p == 0) {		// no file_len 
-		if(debug) 
-			fprintf(stderr,"%s error\n", buf);
+		if (debug)
+			fprintf(stderr, "%s error\n", buf);
 		exit(-1);
 	}
-	*p=0; p++;
-	if(strlen(buf+5)!=32) { // md5sum len
+	*p = 0;
+	p++;
+	if (strlen(buf + 5) != 32) {	// md5sum len
 		p--;
-		*p=' ';
-		if(debug) 
-			fprintf(stderr,"%s md5sum len error\n", buf);
+		*p = ' ';
+		if (debug)
+			fprintf(stderr, "%s md5sum len error\n", buf);
 		exit(-1);
 	}
-	strcpy(md5sum, buf+5);
+	strcpy(md5sum, buf + 5);
 	if (sscanf(p, "%zu", &file_len) != 1) {
 		p--;
-		*p=' ';
-		if(debug) 
-			fprintf(stderr,"%s file len error\n", buf);
+		*p = ' ';
+		if (debug)
+			fprintf(stderr, "%s file len error\n", buf);
 		exit(-1);
 	}
 	while (*p && (*p != ' '))
 		p++;
 	if (*p == 0) {		// no file name
-		if(debug) 
-			fprintf(stderr,"no file name\n");
+		if (debug)
+			fprintf(stderr, "no file name\n");
 		exit(-1);
 	}
 	p++;
 	if (*p == 0) {		// no file name
-		if(debug) 
-			fprintf(stderr,"no file name\n");
+		if (debug)
+			fprintf(stderr, "no file name\n");
 		exit(-1);
 	}
 	strcpy(file_name, p);
-	if(debug)
-		fprintf(stderr,"C->S: FILE %s %zu %s\n", md5sum, file_len, file_name);
-	
+	if (debug)
+		fprintf(stderr, "C->S: FILE %s %zu %s\n", md5sum, file_len, file_name);
+
 	if (access(file_name, F_OK) != -1) {	// file exists
 		strcpy(buf, "ERROR file exist\n");
 		Writen(fd, buf, strlen(buf));
@@ -530,26 +533,26 @@ void ProcessFile(int fd) {
 		exit(-1);
 	}
 	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
-	if(access(hashed_file, F_OK)!=0)  // hashed file not exist, recv it
+	if (access(hashed_file, F_OK) != 0)	// hashed file not exist, recv it
 		RecvHashedFile(fd, md5sum, hashed_file, file_len);
 
 	check_and_create_dir(file_name);
 
 	n = link(hashed_file, file_name);
-	if(n==0) { // OK
+	if (n == 0) {		// OK
 		snprintf(buf, 100, "OK file in server\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "OK file in server\n");
 		return;
 	}
-	
+
 	snprintf(buf, 100, "ERROR link file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
 		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
 	exit(-1);
-		
+
 }
 
 void Process(int fd)
@@ -620,7 +623,7 @@ void Process(int fd)
 	strcpy(buf, "OK password ok\n");
 	Writen(fd, buf, strlen(buf));
 
-	while(1) 
+	while (1)
 		ProcessFile(fd);
 }
 
