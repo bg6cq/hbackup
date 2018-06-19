@@ -1,2 +1,2 @@
-test /tmp
+test /tmp/test
 test1 /tmp/test1

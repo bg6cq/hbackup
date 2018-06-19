@@ -1,5 +1,5 @@
 hbackup_server: hbackup_server.c
-	gcc -o hbackup_server -g -Wall hbackup_server.c
+	gcc -o hbackup_server -g -Wall hbackup_server.c -lssl
 
 indent: hbackup_server.c
 	indent  hbackup_server.c -nbad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  \

@@ -28,6 +28,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <openssl/md5.h>
 
 #define MAXLEN 		16384
 #define MAXLINE 	1024*1024
@@ -39,6 +40,43 @@ int my_port;
 char config_file[MAXLEN];
 char work_user[MAXLEN];
 int work_uid;
+
+char * get_file_md5sum(char *file_name)
+{
+	int n;
+	MD5_CTX c;
+	char buf[512];
+	ssize_t bytes;
+	FILE *fp;
+
+	unsigned char out[MD5_DIGEST_LENGTH];
+	static char outhex[64];
+
+	MD5_Init(&c);
+	fp = fopen(file_name,"r");
+	if(fp==NULL) {
+		outhex[0]=0;
+		return (char *) outhex;
+	}
+		
+	bytes=fread(buf,1, 512, fp);
+	
+	while(bytes > 0) {
+        	MD5_Update(&c, buf, bytes);
+        	bytes=fread(buf,1, 512, fp);
+    	}
+
+    	MD5_Final(out, &c);
+	fclose(fp);
+	outhex[0]=0;
+    	for(n=0; n<MD5_DIGEST_LENGTH; n++) {
+        	snprintf(outhex+n*2,3,"%02x", out[n]);
+	}
+
+    	if(debug) fprintf(stderr,"md5sum of file %s is %s\n",file_name,outhex);
+
+    	return(outhex); 
+}
 
 void err_doit(int errnoflag, int level, const char *fmt, va_list ap)
 {
@@ -300,7 +338,7 @@ int bind_and_listen(void)
 char * get_hashed_file_name(char * md5sum, size_t file_len)
 {
 	static char hashed_file_name[MAXLEN];
-	snprintf(hashed_file_name, MAXLEN, "/%c%c/%c%c/%s_%zu",
+	snprintf(hashed_file_name, MAXLEN, "/hashed_file/%c%c/%c%c/%s_%zu",
 		md5sum[0], md5sum[1], md5sum[2], md5sum[3], md5sum, file_len);
 	return hashed_file_name;
 }
@@ -343,7 +381,9 @@ void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_l
 	char file_name[MAXLEN];
 	size_t file_got = 0;
 	int n;
-
+	
+	strcpy(buf,"DATA I need your data\n");
+	Writen(fd, buf, strlen(buf));
 	snprintf(file_name, MAXLEN, "/hashed_file/tmp.%d", getpid());
 	check_and_create_dir(file_name);
 	FILE *fp = fopen(file_name, "w");
@@ -388,11 +428,9 @@ void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_l
 			fprintf(stderr, "write %zu of %zu\n", file_got, file_len);
 	}
 	fclose(fp);
-	snprintf(buf, MAXLEN ,"md5sum %s", file_name);
-	fp= popen(buf,"r");
-	fread(buf, 1, 32, fp); // read md5sum first 32 bytes
-	fclose(fp);
-	if(memcpy(md5sum, buf, 32)!=0) {
+	fprintf(stderr,"md5sum :%s:\n",md5sum);
+	fprintf(stderr,"md5sum :%s:(new_file)\n",get_file_md5sum(file_name));
+	if(memcmp(md5sum, get_file_md5sum(file_name), 32)!=0) {
 		unlink(file_name);
 		strcpy(buf, "ERROR file md5sum\n");
 		Writen(fd, buf, strlen(buf));

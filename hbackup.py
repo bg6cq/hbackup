@@ -4,6 +4,14 @@ import socket
 import sys
 import os
 
+import hashlib
+def md5sum(filename, blocksize=65536):
+    hash = hashlib.md5()
+    with open(filename, "rb") as f:
+        for block in iter(lambda: f.read(blocksize), b""):
+            hash.update(block)
+    return hash.hexdigest()
+
 if len(sys.argv) < 5:
     print 'Usage: python %s <HostName> <PortNumber> <Password> <FileToSend> [ file_new_name ]' % (sys.argv[0])
     print 'FileToSend - means read from stdin'
@@ -48,30 +56,33 @@ if data[0:2] != 'OK':
     print 'exit with return code 255'
     sys.exit(-1)
 
-if file_name =="-":
-    CHUNKSIZE=1024
-    s.send('FILE '+file_new_name+'\n')
-    while True:
-        bytes_read = sys.stdin.read(CHUNKSIZE)
-        if bytes_read:
-            s.send(bytes_read);
-        else:
-            break;
+filemd5sum = md5sum(file_name)
+file_size = os.path.getsize(file_name)
+print filemd5sum + "_"+ str( file_size)
+s.send('FILE '+filemd5sum+' '+str(file_size) + ' '+file_new_name+'\n')
+data = s.recv(100)
+print 'S', data
+if data[0:2] == 'OK':
     print 'OK, exit with return code 0'
+    s.send('END\n')
     sys.exit(0)
-else:
-    file_size = os.path.getsize(file_name)
+
+if data[0:4] == 'DATA':
+    print "I will send file"
     CHUNKSIZE=1024*1024
     file = open(file_name, "rb")
-    s.send('FILE '+file_new_name+' '+str(file_size)+'\n')
-    if file_size == 0:
-        print '0 size file, just exit'
-        sys.exit(0)
+    bytes_send = 0
     try:
         while True:
-            bytes_read = file.read(CHUNKSIZE)
+            need_read = file_size - bytes_send
+            if need_read > 0:
+                 if need_read > CHUNKSIZE:
+                     bytes_read = file.read(CHUNKSIZE)
+                 else:
+                     bytes_read = file.read(need_read)
             if bytes_read:
                 s.send(bytes_read);
+                bytes_send += len(bytes_read)
             else:
                 break;
     finally:
@@ -80,6 +91,7 @@ else:
     print 'S', data
     if data[0:2] == 'OK':
         print 'OK, exit with return code 0'
+        s.send('END\n')
         sys.exit(0)
     else:
         sys.exit(-1)
