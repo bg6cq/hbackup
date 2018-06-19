@@ -297,13 +297,227 @@ int bind_and_listen(void)
 	return listenfd;
 }
 
-void Process(int fd)
+char * get_hashed_file_name(char * md5sum, size_t file_len)
+{
+	static char hashed_file_name[MAXLEN];
+	snprintf(hashed_file_name, MAXLEN, "/%c%c/%c%c/%s_%zu",
+		md5sum[0], md5sum[1], md5sum[2], md5sum[3], md5sum, file_len);
+	return hashed_file_name;
+}
+
+void check_and_create_dir(char *file_name)
+{
+	if (strchr(file_name, '/')) {	// file_name has directory, check and mkdir 
+		char str[MAXLEN];
+		int i, len;
+		strncpy(str, file_name, MAXLEN);
+		len = strlen(str);
+		// find the last '/'
+		for (i = len - 1; i >= 0; i--)
+			if (str[i] == '/') {
+				str[i] = 0;
+				break;
+			}
+		len = strlen(str);
+		for (i = 0; i < len; i++) {
+			if (str[i] == '/') {
+				str[i] = '\0';
+				if (access(str, 0) != 0) {
+					if (debug)
+						fprintf(stderr, "mkdir %s\n", str);
+					mkdir(str, 0733);
+				}
+				str[i] = '/';
+			}
+		}
+		if (len > 0 && access(str, 0) != 0) {
+			if (debug)
+				fprintf(stderr, " mkdir %s\n", str);
+			mkdir(str, 0733);
+		}
+	}
+}
+void RecvHashedFile(int fd, char *md5sum,  char *hashed_file_name, size_t file_len)
 {
 	char buf[MAXLEN];
 	char file_name[MAXLEN];
+	size_t file_got = 0;
+	int n;
+
+	snprintf(file_name, MAXLEN, "/hashed_file/tmp.%d", getpid());
+	check_and_create_dir(file_name);
+	FILE *fp = fopen(file_name, "w");
+	if (fp == NULL) {
+		snprintf(buf, MAXLEN, "ERROR open tmpfile %s for write\n", file_name);
+		Writen(fd, buf, strlen(buf));
+		if(debug)
+			fprintf(stderr,"%s",buf);
+		exit(-1);
+	}
+	if (debug)
+		fprintf(stderr, "tmpfile %s open for write\n", file_name);
+	while (1) {
+		size_t remains = file_len - file_got;
+		char buf[MAXLINE];
+		if (remains == 0)
+			break;
+		if (remains >= MAXLINE)
+			n = Readn(fd, buf, MAXLINE);
+		else
+			n = Readn(fd, buf, remains);
+		file_got += n;
+		if (n == 0) {	// end of file
+			fclose(fp);
+			unlink(file_name);
+			snprintf(buf, 100, "ERROR file length %zu\n", file_got);
+			Writen(fd, buf, strlen(buf));
+			if(debug)
+				fprintf(stderr,"%s",buf);
+			exit(-1);
+		}
+		if (fwrite(buf, 1, n, fp) != n) {
+			fclose(fp);
+			unlink(file_name);
+			strcpy(buf, "ERROR file write\n");
+			Writen(fd, buf, strlen(buf));
+			if(debug)
+				fprintf(stderr,"%s",buf);
+			exit(-1);
+		}
+		if (debug)
+			fprintf(stderr, "write %zu of %zu\n", file_got, file_len);
+	}
+	fclose(fp);
+	snprintf(buf, MAXLEN ,"md5sum %s", file_name);
+	fp= popen(buf,"r");
+	fread(buf, 1, 32, fp); // read md5sum first 32 bytes
+	fclose(fp);
+	if(memcpy(md5sum, buf, 32)!=0) {
+		unlink(file_name);
+		strcpy(buf, "ERROR file md5sum\n");
+		Writen(fd, buf, strlen(buf));
+		if(debug)
+			fprintf(stderr,"%s",buf);
+		exit(-1);
+	}	
+	check_and_create_dir(hashed_file_name);
+	n = rename(file_name, hashed_file_name);
+	if(n==0) 
+		return;
+	
+	unlink(file_name);
+	snprintf(buf, 100, "ERROR rename uploaded file error %d, exit\n", errno);
+	Writen(fd, buf, strlen(buf));
+	if (debug)
+		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
+	exit(-1);
+}
+
+size_t total_file_len, upload_file_len;
+
+void ProcessFile(int fd) {
+	char buf[MAXLEN];
+	char file_name[MAXLEN];
+	char hashed_file[MAXLEN];
+	char md5sum[MAXLEN];
 	char *p;
 	size_t file_len;
-	size_t file_got = 0;
+	int n;
+
+	n = Readline(fd, buf, MAXLEN);
+	buf[n] = 0;
+	if (memcmp(buf, "END\n", 4) == 0){ 	// END all
+		snprintf(buf,MAXLEN, "BYE %zu of %zu\n", upload_file_len, total_file_len);
+		Writen(fd, buf, strlen(buf));
+		if (debug)
+			fprintf(stderr, "%s", buf);
+		exit(0);
+	}
+
+// C -> FILE md5sum file_len file_name\n
+//
+	if (memcmp(buf, "FILE ", 5) != 0){	// FILE file_name [file_len]
+		if(debug) 
+			fprintf(stderr,"%s unknow cmd\n", buf);
+		exit(-1);
+	}
+	if (buf[strlen(buf) - 1] == '\n')
+		buf[strlen(buf) - 1] = 0;
+	p = buf + 5;
+	while (*p && (*p != ' '))
+		p++;
+	if (*p == 0) {		// no file_len 
+		if(debug) 
+			fprintf(stderr,"%s error\n", buf);
+		exit(-1);
+	}
+	*p=0; p++;
+	if(strlen(buf+5)!=32) { // md5sum len
+		p--;
+		*p=' ';
+		if(debug) 
+			fprintf(stderr,"%s md5sum len error\n", buf);
+		exit(-1);
+	}
+	strcpy(md5sum, buf+5);
+	if (sscanf(p, "%zu", &file_len) != 1) {
+		p--;
+		*p=' ';
+		if(debug) 
+			fprintf(stderr,"%s file len error\n", buf);
+		exit(-1);
+	}
+	while (*p && (*p != ' '))
+		p++;
+	if (*p == 0) {		// no file name
+		if(debug) 
+			fprintf(stderr,"no file name\n");
+		exit(-1);
+	}
+	p++;
+	if (*p == 0) {		// no file name
+		if(debug) 
+			fprintf(stderr,"no file name\n");
+		exit(-1);
+	}
+	strcpy(file_name, p);
+	if(debug)
+		fprintf(stderr,"C->S: FILE %s %zu %s\n", md5sum, file_len, file_name);
+	
+	if (access(file_name, F_OK) != -1) {	// file exists
+		strcpy(buf, "ERROR file exist\n");
+		Writen(fd, buf, strlen(buf));
+		if (debug)
+			fprintf(stderr, "file %s exist, exit\n", file_name);
+		exit(-1);
+	}
+	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
+	if(access(hashed_file, F_OK)!=0)  // hashed file not exist, recv it
+		RecvHashedFile(fd, md5sum, hashed_file, file_len);
+
+	check_and_create_dir(file_name);
+
+	n = link(hashed_file, file_name);
+	if(n==0) { // OK
+		snprintf(buf, 100, "OK file in server\n");
+		Writen(fd, buf, strlen(buf));
+		if (debug)
+			fprintf(stderr, "OK file in server\n");
+		return;
+	}
+	
+	snprintf(buf, 100, "ERROR link file error %d, exit\n", errno);
+	Writen(fd, buf, strlen(buf));
+	if (debug)
+		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
+	exit(-1);
+		
+}
+
+void Process(int fd)
+{
+	char buf[MAXLEN];
+	char *p;
 	int n;
 	int pass_ok;
 
@@ -368,127 +582,8 @@ void Process(int fd)
 	strcpy(buf, "OK password ok\n");
 	Writen(fd, buf, strlen(buf));
 
-//
-// C -> FILE file_name [size]
-//
-	n = Readline(fd, buf, MAXLEN);
-	buf[n] = 0;
-	if (memcmp(buf, "FILE ", 5) != 0)	// FILE file_name [file_len]
-		exit(-1);
-	if (buf[strlen(buf) - 1] == '\n')
-		buf[strlen(buf) - 1] = 0;
-	p = buf + 5;
-	while (*p && (*p != ' '))
-		p++;
-	file_len = 0;
-	if (*p == 0)		// no file_len
-		strcpy(file_name, buf + 5);
-	else {
-		*p = 0;
-		p++;
-		strcpy(file_name, buf + 5);
-		if (sscanf(p, "%zu", &file_len) != 1)
-			exit(-1);
-	}
-	if (debug)
-		fprintf(stderr, "file %s len: %zu\n", file_name, file_len);
-	if (access(file_name, F_OK) != -1) {	// file exists
-		strcpy(buf, "ERROR file exist\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "file %s exist, exit\n", file_name);
-		exit(-1);
-	}
-	if (strchr(file_name, '/')) {	// file_name has directory, check and mkdir 
-		char str[MAXLEN];
-		int i, len;
-		strncpy(str, file_name, MAXLEN);
-		len = strlen(str);
-		// find the last '/'
-		for (i = len - 1; i >= 0; i--)
-			if (str[i] == '/') {
-				str[i] = 0;
-				break;
-			}
-		len = strlen(str);
-		for (i = 0; i < len; i++) {
-			if (str[i] == '/') {
-				str[i] = '\0';
-				if (access(str, 0) != 0) {
-					if (debug)
-						fprintf(stderr, "mkdir %s\n", str);
-					mkdir(str, 0733);
-				}
-				str[i] = '/';
-			}
-		}
-		if (len > 0 && access(str, 0) != 0) {
-			if (debug)
-				fprintf(stderr, " mkdir %s\n", str);
-			mkdir(str, 0733);
-		}
-	}
-	FILE *fp = fopen(file_name, "w");
-	if (fp == NULL) {
-		strcpy(buf, "ERROR file open for write\n");
-		Writen(fd, buf, strlen(buf));
-		exit(-1);
-	}
-	if (debug)
-		fprintf(stderr, "file %s open for write\n", file_name);
-	if (file_len == 0) {
-		char buf[MAXLINE];
-		while (1) {
-			n = Readn(fd, buf, MAXLINE);
-			file_len += n;
-			if (n == 0) {	// read end of file
-				fclose(fp);
-				snprintf(buf, 100, "OK file length %zu\n", file_len);
-				Writen(fd, buf, strlen(buf));
-				if (debug)
-					fprintf(stderr, "write %zu\n", file_len);
-				exit(0);
-			}
-			if (fwrite(buf, 1, n, fp) != n) {
-				strcpy(buf, "ERROR file write\n");
-				Writen(fd, buf, strlen(buf));
-				if (debug)
-					fprintf(stderr, "write %zu\n", file_len);
-				exit(-1);
-			}
-			if (debug)
-				fprintf(stderr, "write %zu\n", file_len);
-		}
-	}
-	while (1) {
-		size_t remains = file_len - file_got;
-		char buf[MAXLINE];
-		if (remains == 0)
-			break;
-		if (remains >= MAXLINE)
-			n = Readn(fd, buf, MAXLINE);
-		else
-			n = Readn(fd, buf, remains);
-		file_got += n;
-		if (n == 0) {	// end of file
-			fclose(fp);
-			snprintf(buf, 100, "ERROR file length %zu\n", file_got);
-			Writen(fd, buf, strlen(buf));
-			exit(-1);
-		}
-		if (fwrite(buf, 1, n, fp) != n) {
-			strcpy(buf, "ERROR file write\n");
-			strcpy(buf, "ERROR file write\n");
-			Writen(fd, buf, strlen(buf));
-			exit(-1);
-		}
-		if (debug)
-			fprintf(stderr, "write %zu of %zu\n", file_got, file_len);
-	}
-	fclose(fp);
-	snprintf(buf, 100, "OK file length %zu\n", file_got);
-	Writen(fd, buf, strlen(buf));
-	exit(0);
+	while(1) 
+		ProcessFile(fd);
 }
 
 void usage(void)
