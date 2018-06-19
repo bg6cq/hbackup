@@ -686,6 +686,7 @@ int main(int argc, char *argv[])
 		printf("\n");
 	}
 
+	signal(SIGCHLD, SIG_IGN);
 	if (debug == 0) {
 		daemon_init("translog_server", LOG_DAEMON);
 		while (1) {
