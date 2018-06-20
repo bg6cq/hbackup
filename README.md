@@ -94,3 +94,13 @@ Usage: python ./hbackup.py <HostName> <PortNumber> <Password> <FileToSend> file_
 
 最后可选参数是服务器重命名文件。
 ```
+
+目前客户端不完善，只能单个文件备份，而且速度不算快：
+```
+假定要备份 /usr/src/wlan 下的文件，可以：
+
+cd /usr/src/wlan; find .  -type f | grep -v "^.$" | while read f; do
+echo $f
+/usr/src/hbackup/hbackup.py 127.0.0.1 99 test $f 20180612/$f
+done
+```
