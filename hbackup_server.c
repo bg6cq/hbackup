@@ -336,6 +336,47 @@ int bind_and_listen(void)
 	return listenfd;
 }
 
+unsigned char x2c(char x)
+{
+	if (isdigit(x))
+		return x - '0';
+	else if (islower(x))
+		return x - 'a' + 10;
+	else
+		return x - 'A' + 10;
+}
+
+int ishex(char c)
+{
+	if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+		return 1;
+	else
+		return 0;
+
+}
+
+char *url_decode(char *s)
+{
+	char *p = s, *str = s;
+	if (debug)
+		fprintf(stderr, "url_decode:%s:\n", s);
+	while (*s) {
+		if (*s == '+')
+			*p = ' ';
+		else if ((*s == '%') && ishex(*(s + 1)) && ishex(*(s + 2))) {
+			*p = (x2c(*(s + 1)) << 4) + x2c(*(s + 2));
+			s += 2;
+		} else
+			*p = *s;
+		s++;
+		p++;
+	}
+	*p = 0;
+	if (debug)
+		fprintf(stderr, "url_decode:%s:\n", str);
+	return str;
+}
+
 char *get_hashed_file_name(char *md5sum, size_t file_len)
 {
 	static char hashed_file_name[MAXLEN];
@@ -495,6 +536,7 @@ void ProcessFile(int fd)
 	if (memcmp(buf, "MKDIR ", 6) == 0) {	// MKDIR dir_name
 		char str[MAXLEN];
 		p = buf + 6;
+		url_decode(p);
 		snprintf(str, MAXLEN, "/data/%s", p);
 		create_dir(str);
 		snprintf(buf, 100, "OK mkdir\n");
@@ -516,7 +558,9 @@ void ProcessFile(int fd)
 		}
 		*p = 0;
 		p++;
+		url_decode(buf + 7);
 		snprintf(strnew, MAXLEN, "/data/%s", buf + 7);
+		url_decode(p);
 		snprintf(strold, MAXLEN, "%s", p);
 		check_and_create_dir(strnew);
 		symlink(strold, strnew);
@@ -528,7 +572,7 @@ void ProcessFile(int fd)
 	}
 // C -> FILE md5sum file_len file_name\n
 //
-	if (memcmp(buf, "FILE ", 5) != 0) {	// FILE file_name [file_len]
+	if (memcmp(buf, "FILE ", 5) != 0) {	// FILE md5sum file_len file_name
 		if (debug)
 			fprintf(stderr, "%s unknow cmd\n", buf);
 		exit(-1);
@@ -580,6 +624,7 @@ void ProcessFile(int fd)
 			fprintf(stderr, "no file name\n");
 		exit(-1);
 	}
+	url_decode(p);
 	snprintf(file_name, MAXLEN, "/data/%s", p);
 	if (debug)
 		fprintf(stderr, "C->S: FILE %s %zu %s\n", md5sum, file_len, file_name);
