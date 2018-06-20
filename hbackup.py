@@ -1,11 +1,13 @@
-#!/usr/bin/python
+#!/usr/bin/python3
+
+debug = False
 
 import socket
 import sys
 import os
-from urllib import quote
-
+import urllib.parse
 import hashlib
+
 def md5sum(filename, blocksize=65536):
     hash = hashlib.md5()
     with open(filename, "rb") as f:
@@ -45,29 +47,33 @@ except socket.error:
         s.close();
     print ('Socket connection is not established!\t' + message)
     sys.exit(1);
+if debug:
+    print ('Connected to ' + host + ' on IP ' + host_ip + ' port ' + str(port) + '.')
 
-print ('Connected to ' + host + ' on IP ' + host_ip + ' port ' + str(port) + '.')
-
-s.send('PASS '+pass_word+'\n')
-data = s.recv(100)
+s.send(('PASS '+pass_word+'\n').encode())
+data = s.recv(100).decode()
 if data[0:2] != 'OK':
-    print ('S', data, )
-    print ('exit with return code 255')
+    if debug:
+        print ('S', data, end='')
+        print ('exit with return code 255')
     sys.exit(-1)
 
 filemd5sum = md5sum(file_name)
 file_size = os.path.getsize(file_name)
 print (filemd5sum + "_" + str( file_size))
-s.send('FILE ' + filemd5sum + ' ' + str(file_size) + ' ' + quote(file_new_name) + '\n')
-data = s.recv(100)
-print ('S', data,)
+s.send(('FILE ' + filemd5sum + ' ' + str(file_size) + ' ' + urllib.parse.quote(file_new_name) + '\n').encode())
+data = s.recv(100).decode()
 if data[0:2] == 'OK':
-    print ('OK, exit with return code 0')
-    s.send('END\n')
+    if debug:
+        print ('S', data,end='')
+        print ('OK, exit with return code 0')
+    s.send('END\n'.encode())
     sys.exit(0)
 
 if data[0:4] == 'DATA':
-    print ("I will send file")
+    if debug:
+        print ('S', data,end='')
+        print ("I will send file")
     CHUNKSIZE=1024*1024
     file = open(file_name, "rb")
     bytes_send = 0
@@ -79,18 +85,22 @@ if data[0:4] == 'DATA':
                      bytes_read = file.read(CHUNKSIZE)
                  else:
                      bytes_read = file.read(need_read)
-            if bytes_read:
-                s.send(bytes_read);
-                bytes_send += len(bytes_read)
+                 if len(bytes_read)>0:
+                     s.send(bytes_read)
+                     bytes_send += len(bytes_read)
+                 else:
+                     break
             else:
-                break;
+                break
     finally:
         file.close()
-    data = s.recv(100)
-    print ('S', data,)
+    data = s.recv(100).decode()
     if data[0:2] == 'OK':
-        print ('OK, exit with return code 0')
-        s.send('END\n')
+        if debug:
+            print ('S', data,end='')
+            print ('OK, exit with return code 0')
+        s.send('END\n'.encode())
         sys.exit(0)
     else:
+        print ('S', data,end='')
         sys.exit(-1)
