@@ -344,6 +344,30 @@ char *get_hashed_file_name(char *md5sum, size_t file_len)
 	return hashed_file_name;
 }
 
+void create_dir(char *dir_name)
+{
+	char str[MAXLEN];
+	int i, len;
+	strncpy(str, dir_name, MAXLEN);
+	len = strlen(str);
+	for (i = 0; i < len; i++) {
+		if ((str[i] == '/') && (i != 0)) {
+			str[i] = '\0';
+			if (access(str, 0) != 0) {
+				if (debug)
+					fprintf(stderr, "mkdir %s\n", str);
+				mkdir(str, 0755);
+			}
+			str[i] = '/';
+		}
+	}
+	if (len > 0 && access(str, 0) != 0) {
+		if (debug)
+			fprintf(stderr, " mkdir %s\n", str);
+		mkdir(str, 0755);
+	}
+}
+
 void check_and_create_dir(char *file_name)
 {
 	if (strchr(file_name, '/')) {	// file_name has directory, check and mkdir 
@@ -357,23 +381,7 @@ void check_and_create_dir(char *file_name)
 				str[i] = 0;
 				break;
 			}
-		len = strlen(str);
-		for (i = 0; i < len; i++) {
-			if (str[i] == '/') {
-				str[i] = '\0';
-				if (access(str, 0) != 0) {
-					if (debug)
-						fprintf(stderr, "mkdir %s\n", str);
-					mkdir(str, 0733);
-				}
-				str[i] = '/';
-			}
-		}
-		if (len > 0 && access(str, 0) != 0) {
-			if (debug)
-				fprintf(stderr, " mkdir %s\n", str);
-			mkdir(str, 0733);
-		}
+		create_dir(str);
 	}
 }
 
@@ -467,12 +475,56 @@ void ProcessFile(int fd)
 
 	n = Readline(fd, buf, MAXLEN);
 	buf[n] = 0;
+	if (n == 0) {
+		if (debug)
+			fprintf(stderr, "read 0, exit\n");
+		exit(0);
+	}
+
 	if (memcmp(buf, "END\n", 4) == 0) {	// END all
 		snprintf(buf, MAXLEN, "BYE %zu of %zu\n", upload_file_len, total_file_len);
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
 		exit(0);
+	}
+
+	if (buf[strlen(buf) - 1] == '\n')
+		buf[strlen(buf) - 1] = 0;
+
+	if (memcmp(buf, "MKDIR ", 6) == 0) {	// MKDIR dir_name
+		char str[MAXLEN];
+		p = buf + 6;
+		snprintf(str, MAXLEN, "/data/%s", p);
+		create_dir(str);
+		snprintf(buf, 100, "OK mkdir\n");
+		Writen(fd, buf, strlen(buf));
+		if (debug)
+			fprintf(stderr, "OK mkdir\n");
+		return;
+	}
+
+	if (memcmp(buf, "MKLINK ", 7) == 0) {	// MKLINK file_name linkto_name
+		char strnew[MAXLEN], strold[MAXLEN];
+		p = buf + 7;
+		while (*p && (*p != ' '))
+			p++;
+		if (*p == 0) {	// 
+			if (debug)
+				fprintf(stderr, "%s error\n", buf);
+			exit(-1);
+		}
+		*p = 0;
+		p++;
+		snprintf(strnew, MAXLEN, "/data/%s", buf + 7);
+		snprintf(strold, MAXLEN, "%s", p);
+		check_and_create_dir(strnew);
+		symlink(strold, strnew);
+		snprintf(buf, 100, "OK mklink\n");
+		Writen(fd, buf, strlen(buf));
+		if (debug)
+			fprintf(stderr, "OK mklink\n");
+		return;
 	}
 // C -> FILE md5sum file_len file_name\n
 //
@@ -579,6 +631,8 @@ void Process(int fd)
 		pass_ok = 0;
 		n = Readline(fd, buf, MAXLEN);
 		buf[n] = 0;
+		if (n == 0)
+			exit(0);
 		if (memcmp(buf, "PASS ", 5) != 0)
 			continue;
 		if (buf[strlen(buf) - 1] == '\n')

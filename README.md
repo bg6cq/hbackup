@@ -54,6 +54,13 @@ END\n
 BYE upload_size of total_file_size \n
 ```
 
+2.3 除了发送文件外，还支持以下2个命令：
+
+```
+MKDIR dir_name #用于创建目录
+MKLINK new_name old_name  #用于创建软连接
+```
+
 ## 服务器端
 
 hbackup_server是服务器端程序，执行时命令行如下：
