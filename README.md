@@ -74,8 +74,9 @@ Usage:
 
     -d              enable debug
 
-config_file:
+config_file内容是如下的若干行（work_dir需要在备份文件之前建立，并且对user_name可读写）:
 password work_dir
+password2 work_dir2
 
 其中： 
 
@@ -86,6 +87,7 @@ password work_dir
 
 配置文件格式为：
 密码 目录
+密码2 目录2
 
 客户端验证密码后，会把文件上传到目录下
 ```
