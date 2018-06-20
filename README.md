@@ -1,5 +1,3 @@
-# 服务器端初步可以工作，客户端只能上传单个文件
-
 ## 适用于文件备份的程序
 
 系统工作的前提：不存在同样长度的文件，它们的md5sum相同。
@@ -94,20 +92,10 @@ password work_dir
 
 ## 客户端
 
-客户端为python程序，命令行是:
+客户端为python 3程序，命令行是:
 ```
-./hbackup.py 
-Usage: python ./hbackup.py <HostName> <PortNumber> <Password> <FileToSend> file_new_name
+python3 hbackup.py 
+Usage: python hbackup.py <HostName> <PortNumber> <Password> <File/DirToSend> [ new_name ]
 
 最后可选参数是服务器重命名文件。
-```
-
-目前客户端不完善，只能单个文件备份，而且速度不算快：
-```
-假定要备份 /usr/src/wlan 下的文件，可以：
-
-cd /usr/src/wlan; find .  -type f | grep -v "^.$" | while read f; do
-echo $f
-/usr/src/hbackup/hbackup.py 127.0.0.1 99 test $f 20180612/$f
-done
 ```

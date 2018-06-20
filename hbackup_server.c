@@ -40,6 +40,7 @@ int my_port;
 char config_file[MAXLEN];
 char work_user[MAXLEN];
 int work_uid;
+size_t total_file_len, upload_file_len;
 
 char *get_file_md5sum(char *file_name)
 {
@@ -362,8 +363,6 @@ int ishex(char c)
 char *url_decode(char *s)
 {
 	char *p = s, *str = s;
-	if (debug)
-		fprintf(stderr, "url_decode:%s:\n", s);
 	while (*s) {
 		if (*s == '+')
 			*p = ' ';
@@ -376,8 +375,6 @@ char *url_decode(char *s)
 		p++;
 	}
 	*p = 0;
-	if (debug)
-		fprintf(stderr, "url_decode:%s:\n", str);
 	return str;
 }
 
@@ -461,6 +458,7 @@ void RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_le
 		else
 			n = Readn(fd, buf, remains);
 		file_got += n;
+		upload_file_len += n;
 		if (n == 0) {	// end of file
 			fclose(fp);
 			unlink(file_name);
@@ -505,8 +503,6 @@ void RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_le
 		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
 	exit(-1);
 }
-
-size_t total_file_len, upload_file_len;
 
 void ProcessFile(int fd)
 {
@@ -567,18 +563,24 @@ void ProcessFile(int fd)
 		url_decode(p);
 		snprintf(strold, MAXLEN, "%s", p);
 		check_and_create_dir(strnew);
-		symlink(strold, strnew);
-		snprintf(buf, 100, "OK mklink\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "OK mklink\n");
+		if (symlink(strold, strnew) == 0) {
+			snprintf(buf, 100, "OK mklink\n");
+			Writen(fd, buf, strlen(buf));
+			if (debug)
+				fprintf(stderr, "OK mklink\n");
+		} else {
+			snprintf(buf, 100, "ERROR mklink\n");
+			Writen(fd, buf, strlen(buf));
+			if (debug)
+				fprintf(stderr, "ERROR mklink\n");
+		}
 		return;
 	}
 // C -> FILE md5sum file_len file_name\n
 //
 	if (memcmp(buf, "FILE ", 5) != 0) {	// FILE md5sum file_len file_name
 		if (debug)
-			fprintf(stderr, "%s unknow cmd\n", buf);
+			fprintf(stderr, "%s unknown cmd\n", buf);
 		exit(-1);
 	}
 	if (buf[strlen(buf) - 1] == '\n')
@@ -608,6 +610,7 @@ void ProcessFile(int fd)
 			fprintf(stderr, "%s file len error\n", buf);
 		exit(-1);
 	}
+	total_file_len += file_len;
 	while (*p && (*p != ' '))
 		p++;
 	if (*p == 0) {		// no file name
@@ -637,8 +640,8 @@ void ProcessFile(int fd)
 		strcpy(buf, "ERROR file exist\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "file %s exist, exit\n", file_name);
-		exit(-1);
+			fprintf(stderr, "file %s exist, return\n", file_name);
+		return;
 	}
 	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
 	if (access(hashed_file, F_OK) != 0)	// hashed file not exist, recv it
@@ -655,12 +658,10 @@ void ProcessFile(int fd)
 		return;
 	}
 
-	snprintf(buf, 100, "ERROR link file error %d, exit\n", errno);
+	snprintf(buf, 100, "ERROR link file error %d\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
-	exit(-1);
-
+		fprintf(stderr, "ERROR link file error %d\n", errno);
 }
 
 void Process(int fd)
