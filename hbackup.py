@@ -3,6 +3,7 @@
 import socket
 import sys
 import os
+from urllib import quote
 
 import hashlib
 def md5sum(filename, blocksize=65536):
@@ -13,8 +14,7 @@ def md5sum(filename, blocksize=65536):
     return hash.hexdigest()
 
 if len(sys.argv) < 5:
-    print 'Usage: python %s <HostName> <PortNumber> <Password> <FileToSend> [ file_new_name ]' % (sys.argv[0])
-    print 'FileToSend - means read from stdin'
+    print ('Usage: python %s <HostName> <PortNumber> <Password> <FileToSend> [ file_new_name ]' % (sys.argv[0]))
     sys.exit();
 
 host=sys.argv[1]
@@ -28,47 +28,46 @@ else:
 
 try:
         s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-except socket.error, msg:
-        print 'Failed to creat socket. Error code: ' + str(msg[0]) + ' Error message: ' + msg[1]
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+except socket.error:
+        print ('Failed to creat socket. Error code: ' + str(msg[0]) + ' Error message: ' + msg[1])
         sys.exit();
 try:
         host_ip=socket.gethostbyname(host)
 except socket.gaierror:
-        print 'Host name could not be resolved. Exiting...'
+        print ('Host name could not be resolved. Exiting...')
         sys.exit();
-
-print 'IP address of ' + host + ' is ' + host_ip + ' .'
 
 try:
     s.connect((host_ip, port)) 
-except socket.error, (value,message):
+except socket.error:
     if s:
         s.close();
-    print 'Socket connection is not established!\t' + message
+    print ('Socket connection is not established!\t' + message)
     sys.exit(1);
 
-print 'Socket connected to ' + host + ' on IP ' + host_ip + ' port ' + str(port) + '.'
+print ('Connected to ' + host + ' on IP ' + host_ip + ' port ' + str(port) + '.')
 
 s.send('PASS '+pass_word+'\n')
 data = s.recv(100)
-print 'S', data
 if data[0:2] != 'OK':
-    print 'exit with return code 255'
+    print ('S', data, )
+    print ('exit with return code 255')
     sys.exit(-1)
 
 filemd5sum = md5sum(file_name)
 file_size = os.path.getsize(file_name)
-print filemd5sum + "_"+ str( file_size)
-s.send('FILE '+filemd5sum+' '+str(file_size) + ' '+file_new_name+'\n')
+print (filemd5sum + "_" + str( file_size))
+s.send('FILE ' + filemd5sum + ' ' + str(file_size) + ' ' + quote(file_new_name) + '\n')
 data = s.recv(100)
-print 'S', data
+print ('S', data,)
 if data[0:2] == 'OK':
-    print 'OK, exit with return code 0'
+    print ('OK, exit with return code 0')
     s.send('END\n')
     sys.exit(0)
 
 if data[0:4] == 'DATA':
-    print "I will send file"
+    print ("I will send file")
     CHUNKSIZE=1024*1024
     file = open(file_name, "rb")
     bytes_send = 0
@@ -88,9 +87,9 @@ if data[0:4] == 'DATA':
     finally:
         file.close()
     data = s.recv(100)
-    print 'S', data
+    print ('S', data,)
     if data[0:2] == 'OK':
-        print 'OK, exit with return code 0'
+        print ('OK, exit with return code 0')
         s.send('END\n')
         sys.exit(0)
     else:

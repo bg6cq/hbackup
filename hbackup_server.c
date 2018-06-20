@@ -310,6 +310,10 @@ int bind_and_listen(void)
 		perror("error: setsockopt(SO_REUSEADDR)");
 		exit(-1);
 	}
+	if (setsockopt(listenfd, IPPROTO_TCP, TCP_NODELAY, (char *)&enable, sizeof(int)) < 0) {
+		perror("Couldn't setsockopt(TCP_NODELAY)\n");
+		exit(-1);
+	}
 	if (ipv6) {
 		static struct sockaddr_in6 serv_addr6;
 		memset(&serv_addr6, 0, sizeof(serv_addr6));
