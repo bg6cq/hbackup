@@ -4,10 +4,10 @@
 
 系统工作的前提：不存在同样长度的文件，它们的md5sum相同。
 
-假定工作目录是/，系统中有个特殊的文件夹hashed_file，存放有所有的备份文件，这个目录仅仅新增文件。
-hashed_file/ab/cd/abcdefxxxx_size     xxxxxx是文件的md5sum，长度是32字节，全部是小写字母，size是文件大小。为了减少单个目录下文件数量，分2级目录存储。
+假定工作目录是/，系统中有2个特殊的文件夹:
 
-同样的文件在hashed_file下仅仅存1份。其他目录下的文件是到hashed_file的hard link，不占空间。也就是说同样的备份文件，只存1份。
+* hashed_file/，存放有所有的备份文件，这个目录仅仅新增文件。格式如`hashed_file/ab/cd/abcdefxxxx_size`，其中abceefxxxxxx是文件的md5sum(长度是32字节，全部是小写字母)，size是文件长度。为了减少单个目录下文件数量，分2级目录散列存储。
+* data/，存放备份文件。备份时，同样的文件在hashed_file下仅仅存1份。data/目录下的文件是到hashed_file的hard link，不占额外空间。也就是说相同文件（md5sum相同，长度相同）的文件，无论备份多少次，只存1份。
 
 ## 通信协议
 
@@ -84,7 +84,6 @@ password work_dir
 
 客户端验证密码后，会把文件上传到目录下
 ```
-
 
 ## 客户端
 

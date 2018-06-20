@@ -521,7 +521,14 @@ void ProcessFile(int fd)
 			fprintf(stderr, "no file name\n");
 		exit(-1);
 	}
-	strcpy(file_name, p);
+	while (*p && *p == '/')
+		p++;
+	if (*p == 0) {		// no file name
+		if (debug)
+			fprintf(stderr, "no file name\n");
+		exit(-1);
+	}
+	snprintf(file_name, MAXLEN, "/data/%s", p);
 	if (debug)
 		fprintf(stderr, "C->S: FILE %s %zu %s\n", md5sum, file_len, file_name);
 
