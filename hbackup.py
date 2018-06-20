@@ -153,6 +153,8 @@ for root, dirs, files in os.walk(file_name, topdown=True):
     for name in files:
         local_file_name=os.path.join(root,name)
         remote_file_name=file_new_name+'/'+root[len(file_name):]+'/'+name
+        if os.sep == "\\":
+            remote_file_name.replace("\\","/")
         if debug:
             print ("F root="+root+" name="+name+" file_new_name="+file_new_name)
             print(local_file_name + "-->"+remote_file_name)
@@ -171,6 +173,8 @@ for root, dirs, files in os.walk(file_name, topdown=True):
     for name in dirs:
         remote_file_name=file_new_name + '/' + root[len(file_name):] + '/' + name
         print(os.path.join(root,name) + " is dir")
+        if os.sep == "\\":
+            remote_file_name.replace("\\","/")
         send_dir(remote_file_name)
 
 end_hbackup()
