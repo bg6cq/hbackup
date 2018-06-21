@@ -5,6 +5,8 @@ debug = False
 import socket
 import sys
 import os
+import datetime  
+import time 
 import urllib.parse
 import hashlib
 
@@ -34,7 +36,7 @@ def send_dir(remote_name):
             print ('S', data,end='')
         return
     print (' S', data,end='')
-    log_err(remote_name+' '+data +'\n')
+    log_err(remote_name+' '+ data)
 
 def send_link(remote_name, linkto):
     global total_links
@@ -47,7 +49,7 @@ def send_link(remote_name, linkto):
             print ('S', data,end='')
         return
     print (' S', data,end='')
-    log_err(remote_name+' '+data +'\n')
+    log_err(remote_name+' '+ data)
 
 def send_file(local_file_name, remote_name):
     global total_files, total_file_len, upload_file_len
@@ -67,7 +69,7 @@ def send_file(local_file_name, remote_name):
         return
     if data[0:5] == 'ERROR':
         print (' S', data,end='')
-        log_err(local_file_name +' --> '+ remote_name+' '+data +'\n')
+        log_err(local_file_name +' --> '+ remote_name + ' ' + data)
         return
     if data[0:4] == 'DATA':
         if debug:
@@ -111,10 +113,11 @@ def usage():
 
 def log_err(msg):
     if err_log == "":
-        print (msg)
+        print(msg)
         exit(-1)
     f = open(err_log, 'a')  
-    f.write(msg+'\n')  
+    now = datetime.datetime.now() 
+    f.write(str(now)+' '+msg)  
     f.close()  
         
 total_files=total_dirs=total_links=total_file_len=upload_file_len=0
