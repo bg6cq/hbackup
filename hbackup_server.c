@@ -428,7 +428,11 @@ void check_and_create_dir(char *file_name)
 	}
 }
 
-void RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len)
+
+// return 1 OK
+// return 0 error
+
+int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len)
 {
 	char buf[MAXLEN];
 	char file_name[MAXLEN];
@@ -489,18 +493,18 @@ void RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_le
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
-		exit(-1);
+		return 0;
 	}
 	check_and_create_dir(hashed_file_name);
 	n = rename(file_name, hashed_file_name);
 	if (n == 0)
-		return;
+		return 1;
 
 	unlink(file_name);
 	snprintf(buf, 100, "ERROR rename uploaded file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
+		fprintf(stderr, "ERROR rename file error %d, exit\n", errno);
 	exit(-1);
 }
 
@@ -683,23 +687,24 @@ void ProcessFile(int fd)
 					fprintf(stderr, "OK same file in server\n");
 				return;
 			} else {
-				strcpy(buf, "ERROR file exist, but not the same md5sum, exit\n");
+				strcpy(buf, "ERROR file exist, but not the same md5sum\n");
 				Writen(fd, buf, strlen(buf));
 				if (debug)
 					fprintf(stderr,
-						"file %s exist, but not the same md5sum, exit\n",
+						"file %s exist, but not the same md5sum\n",
 						file_name);
-				exit(-1);
+				return;
 			}
 		}
-		strcpy(buf, "ERROR file exist, not the same file, exit\n");
+		strcpy(buf, "ERROR file exist, not the same file\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "file %s exist, not the same file, exit\n", file_name);
-		exit(-1);
+			fprintf(stderr, "file %s exist, not the same file\n", file_name);
+		return;
 	}
 	if (access(hashed_file, F_OK) != 0)	// hashed file not exist, recv it
-		RecvHashedFile(fd, md5sum, hashed_file, file_len);
+		if(RecvHashedFile(fd, md5sum, hashed_file, file_len)==0)
+			return;
 
 	check_and_create_dir(file_name);
 

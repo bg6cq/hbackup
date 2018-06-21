@@ -1,4 +1,57 @@
-## 适用于文件备份的程序
+## 基于md5sum的文件备份程序
+
+优点：
+
+* 多次备份，相同的文件（文件长度和md5sum都一样）的仅传输1次，仅占用服务器上1份空间。
+* 客户端仅允许上传新文件，无法读文件，也永远无法覆盖之前备份过的文件。即便备份密码泄漏也无数据泄漏隐患。
+
+## 服务器端
+
+`make`后生成`hbackup_server`是服务器端程序，执行时命令行如下：
+
+```
+# ./hbackup_server 
+Usage:
+./hbackup_server options
+ options:
+    -p port
+    -f config_file
+    -u user_name    change to user before write file
+
+    -d              enable debug
+
+config_file内容是如下的若干行（work_dir需要在备份文件之前建立，并且对user_name可读写）:
+password work_dir
+password2 work_dir2
+
+其中： 
+
+-p 指明使用的tcp端口
+-f 是配置文件
+-u 是上传后文件的属主
+-d 是开启调试模式，会显示一些调试信息
+
+配置文件格式为：
+密码 目录
+密码2 目录2
+
+客户端验证密码后，会把文件上传到目录下
+```
+
+## 客户端
+
+客户端为python 3程序，命令行是:
+```
+python3 hbackup.py 
+Usage: python hbackup.py [ -e err.log ] <HostName> <PortNumber> <Password> <File/DirToSend> [ new_name ]
+
+* 如果带有参数`-e err.log`，出现备份时错误时，会将未备份的文件信息记录在文件`err.log`，并继续其他文件的备份。
+* 如果不带参数`-e err.log`，出现错误立即停止后续备份过程。
+* 最后的可选参数是服务器上的目录名，每次备份可以使用不同的名字区分。
+
+```
+
+## 工作原理
 
 系统工作的前提：不存在同样长度的文件，它们的md5sum相同。
 
@@ -59,45 +112,3 @@ MKDIR dir_name #用于创建目录
 MKLINK new_name old_name  #用于创建软连接
 ```
 
-## 服务器端
-
-hbackup_server是服务器端程序，执行时命令行如下：
-
-```
-# ./hbackup_server 
-Usage:
-./hbackup_server options
- options:
-    -p port
-    -f config_file
-    -u user_name    change to user before write file
-
-    -d              enable debug
-
-config_file内容是如下的若干行（work_dir需要在备份文件之前建立，并且对user_name可读写）:
-password work_dir
-password2 work_dir2
-
-其中： 
-
--p 指明使用的tcp端口
--f 是配置文件
--u 是上传后文件的属主
--d 是开启调试模式，会显示一些调试信息
-
-配置文件格式为：
-密码 目录
-密码2 目录2
-
-客户端验证密码后，会把文件上传到目录下
-```
-
-## 客户端
-
-客户端为python 3程序，命令行是:
-```
-python3 hbackup.py 
-Usage: python hbackup.py <HostName> <PortNumber> <Password> <File/DirToSend> [ new_name ]
-
-最后可选参数是服务器重命名文件。
-```

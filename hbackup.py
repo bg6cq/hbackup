@@ -33,9 +33,8 @@ def send_dir(remote_name):
         if debug:
             print ('S', data,end='')
         return
-    print("")
-    print ('S', data,end='')
-    end_hbackup(-1)
+    print (' S', data,end='')
+    log_err(remote_name+' '+data +'\n')
 
 def send_link(remote_name, linkto):
     global total_links
@@ -47,9 +46,8 @@ def send_link(remote_name, linkto):
         if debug:
             print ('S', data,end='')
         return
-    print("")
-    print ('S', data,end='')
-    end_hbackup(-1)
+    print (' S', data,end='')
+    log_err(remote_name+' '+data +'\n')
 
 def send_file(local_file_name, remote_name):
     global total_files, total_file_len, upload_file_len
@@ -68,8 +66,9 @@ def send_file(local_file_name, remote_name):
         print("")
         return
     if data[0:5] == 'ERROR':
-        print ('S', data,end='')
-        end_hbackup(-1)
+        print (' S', data,end='')
+        log_err(local_file_name +' --> '+ remote_name+' '+data +'\n')
+        return
     if data[0:4] == 'DATA':
         if debug:
             print ('S', data,end='')
@@ -105,25 +104,49 @@ def send_file(local_file_name, remote_name):
     print ('S', data,end='')
     end_hbackup(-1)
 
-
-total_files=0
-total_dirs=total_links=total_file_len=upload_file_len=0
-
-print (total_files)
-
-if len(sys.argv) < 5:
-    print ('Usage: python %s HostName PortNumber Password File/DirToSend [ Remote_Name ]' % (sys.argv[0]))
+def usage():
+    print ('Usage: python %s [ -e err.log ] HostName PortNumber Password File/DirToSend [ Remote_Name ]' % (sys.argv[0]))
+    print ('  if -e err.log, error msg will be write to err.log, and continue to run')
     sys.exit();
 
-host=sys.argv[1]
-port=int(sys.argv[2])
-pass_word=sys.argv[3]
-file_name=sys.argv[4]
-if len(sys.argv) == 6:
-    file_new_name=sys.argv[5]
-else:
-    file_new_name=file_name
+def log_err(msg):
+    if err_log == "":
+        print (msg)
+        exit(-1)
+    f = open(err_log, 'a')  
+    f.write(msg+'\n')  
+    f.close()  
+        
+total_files=total_dirs=total_links=total_file_len=upload_file_len=0
 
+if len(sys.argv) < 5:
+    usage()
+
+err_log=""
+if sys.argv[1] == "-e":
+    if len(sys.argv) < 7:
+        usage()
+    err_log=sys.argv[2]
+    host=sys.argv[3]
+    port=int(sys.argv[4])
+    pass_word=sys.argv[5]
+    file_name=sys.argv[6]
+    if len(sys.argv) == 8:
+        file_new_name=sys.argv[7]
+    else:
+        file_new_name=file_name
+else:
+    host=sys.argv[1]
+    port=int(sys.argv[2])
+    pass_word=sys.argv[3]
+    file_name=sys.argv[4]
+    if len(sys.argv) == 6:
+        file_new_name=sys.argv[5]
+    else:
+        file_new_name=file_name
+
+print ("a")
+ 
 try:
     s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
