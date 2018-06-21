@@ -15,47 +15,48 @@ def md5sum(filename, blocksize=65536):
             hash.update(block)
     return hash.hexdigest()
 
-if len(sys.argv) < 5:
-    print ('Usage: python %s HostName PortNumber Password File/DirToSend [ Remote_Name ]' % (sys.argv[0]))
-    sys.exit();
-
-host=sys.argv[1]
-port=int(sys.argv[2])
-pass_word=sys.argv[3]
-file_name=sys.argv[4]
-if len(sys.argv) == 6:
-	file_new_name=sys.argv[5]
-else:
-	file_new_name=file_name
-
-def end_hbackup():
+def end_hbackup(retcode = 0):
     s.send('END\n'.encode())
     data = s.recv(100).decode()
     print ('S', data,end='')
     print ('end')
-    sys.exit(0)
+    print ('FDL: %d/%d/%d U/A: %d/%d' % (total_files, total_dirs, total_links, upload_file_len, total_file_len))
+    sys.exit(retcode)
     
 def send_dir(remote_name):
+    global total_dirs
+    total_dirs += 1
     s.send(('MKDIR ' + urllib.parse.quote(remote_name) + '\n').encode())
     data = s.recv(100).decode()
     if data[0:2] == 'OK':
+        print("")
         if debug:
             print ('S', data,end='')
         return
+    print("")
     print ('S', data,end='')
+    end_hbackup(-1)
 
 def send_link(remote_name, linkto):
+    global total_links
+    total_links += 1
     s.send(('MKLINK ' + urllib.parse.quote(remote_name) + ' ' + urllib.parse.quote(linkto) + '\n').encode())
     data = s.recv(100).decode()
     if data[0:2] == 'OK':
+        print("")
         if debug:
             print ('S', data,end='')
         return
+    print("")
     print ('S', data,end='')
+    end_hbackup(-1)
 
 def send_file(local_file_name, remote_name):
+    global total_files, total_file_len, upload_file_len
+    total_files += 1 
     filemd5sum = md5sum(local_file_name)
     file_size = os.path.getsize(local_file_name)
+    total_file_len += file_size
     if debug:
         print (filemd5sum + "_" + str( file_size))
     s.send(('FILE ' + filemd5sum + ' ' + str(file_size) + ' ' + urllib.parse.quote(remote_name) + '\n').encode())
@@ -64,10 +65,11 @@ def send_file(local_file_name, remote_name):
         if debug:
             print ('S', data,end='')
             print ('OK, exit with return code 0')
+        print("")
         return
-    if data[0:16] == 'ERROR file exist':
-        print("FILE EXIST")
-        return
+    if data[0:5] == 'ERROR':
+        print ('S', data,end='')
+        end_hbackup(-1)
     if data[0:4] == 'DATA':
         if debug:
             print ('S', data,end='')
@@ -84,6 +86,7 @@ def send_file(local_file_name, remote_name):
                      else:
                          bytes_read = file.read(need_read)
                      if len(bytes_read)>0:
+                         upload_file_len += len(bytes_read)
                          s.send(bytes_read)
                          bytes_send += len(bytes_read)
                      else:
@@ -97,21 +100,41 @@ def send_file(local_file_name, remote_name):
             if debug:
                 print ('S', data,end='')
                 print ('OK, exit with return code 0')
+            print("")
             return
     print ('S', data,end='')
-    sys.exit(-1)
+    end_hbackup(-1)
+
+
+total_files=0
+total_dirs=total_links=total_file_len=upload_file_len=0
+
+print (total_files)
+
+if len(sys.argv) < 5:
+    print ('Usage: python %s HostName PortNumber Password File/DirToSend [ Remote_Name ]' % (sys.argv[0]))
+    sys.exit();
+
+host=sys.argv[1]
+port=int(sys.argv[2])
+pass_word=sys.argv[3]
+file_name=sys.argv[4]
+if len(sys.argv) == 6:
+    file_new_name=sys.argv[5]
+else:
+    file_new_name=file_name
 
 try:
-        s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 except socket.error:
-        print ('Failed to creat socket. Error code: ' + str(msg[0]) + ' Error message: ' + msg[1])
-        sys.exit(-1);
+    print ('Failed to creat socket. Error code: ' + str(msg[0]) + ' Error message: ' + msg[1])
+    sys.exit(-1);
 try:
-        host_ip=socket.gethostbyname(host)
+    host_ip=socket.gethostbyname(host)
 except socket.gaierror:
-        print ('Host name could not be resolved. Exiting...')
-        sys.exit(-1);
+    print ('Host name could not be resolved. Exiting...')
+    sys.exit(-1);
 
 try:
     s.connect((host_ip, port)) 
@@ -130,7 +153,6 @@ if data[0:2] != 'OK':
         print ('S', data, end='')
         print ('exit with return code 255')
     sys.exit(-1)
-
 
 if os.path.islink(file_name):
     print(file_name + " is symlink")
@@ -159,20 +181,20 @@ for root, dirs, files in os.walk(file_name, topdown=True):
             print ("F root="+root+" name="+name+" file_new_name="+file_new_name)
             print(local_file_name + "-->"+remote_file_name)
         if os.path.islink(local_file_name):
-            print(local_file_name + " is symlink")
+            print(local_file_name + " is symlink", end='')
             linkto=os.readlink(local_file_name)
             send_link(remote_file_name, linkto)
         elif os.path.isfile(local_file_name):
-            print(local_file_name)
+            print(local_file_name, end='')
             if debug:
                 print(local_file_name + " is file")
             send_file(local_file_name, remote_file_name)
         else:
-            print("skip file "+local_file_name)
+            print(local_file_name, " SKIP")
 
     for name in dirs:
         remote_file_name=file_new_name + '/' + root[len(file_name):] + '/' + name
-        print(os.path.join(root,name) + " is dir")
+        print(os.path.join(root,name) + " is dir", end='')
         if os.sep == "\\":
             remote_file_name.replace("\\","/")
         send_dir(remote_file_name)

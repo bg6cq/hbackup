@@ -41,6 +41,7 @@ char config_file[MAXLEN];
 char work_user[MAXLEN];
 int work_uid;
 size_t total_file_len, upload_file_len;
+size_t total_files, total_dirs, total_links;
 
 char *get_file_md5sum(char *file_name)
 {
@@ -462,7 +463,8 @@ void RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_le
 		if (n == 0) {	// end of file
 			fclose(fp);
 			unlink(file_name);
-			snprintf(buf, 100, "ERROR file length %zu\n", file_got);
+			snprintf(buf, 100, "ERROR file length %zu, only read %zu\n", file_len,
+				 file_got);
 			Writen(fd, buf, strlen(buf));
 			if (debug)
 				fprintf(stderr, "%s", buf);
@@ -481,8 +483,6 @@ void RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_le
 			fprintf(stderr, "write %zu of %zu\n", file_got, file_len);
 	}
 	fclose(fp);
-	fprintf(stderr, "md5sum :%s:\n", md5sum);
-	fprintf(stderr, "md5sum :%s:(new_file)\n", get_file_md5sum(file_name));
 	if (memcmp(md5sum, get_file_md5sum(file_name), 32) != 0) {
 		unlink(file_name);
 		strcpy(buf, "ERROR file md5sum\n");
@@ -523,7 +523,8 @@ void ProcessFile(int fd)
 	}
 
 	if (memcmp(buf, "END\n", 4) == 0) {	// END all
-		snprintf(buf, MAXLEN, "BYE %zu of %zu\n", upload_file_len, total_file_len);
+		snprintf(buf, MAXLEN, "BYE FDL: %zu/%zu/%zu U/A: %zu/%zu\n", total_files,
+			 total_dirs, total_links, upload_file_len, total_file_len);
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
@@ -535,19 +536,37 @@ void ProcessFile(int fd)
 
 	if (memcmp(buf, "MKDIR ", 6) == 0) {	// MKDIR dir_name
 		char str[MAXLEN];
+		struct stat stbuf;
+		total_dirs++;
 		p = buf + 6;
 		url_decode(p);
 		snprintf(str, MAXLEN, "/data/%s", p);
+		if (stat(str, &stbuf) == 0) {
+			if (S_ISDIR(stbuf.st_mode)) {	// dir exists
+				snprintf(buf, 100, "OK mkdir, dir in server\n");
+				Writen(fd, buf, strlen(buf));
+				if (debug)
+					fprintf(stderr, "OK mkdir, dir in server\n");
+				return;
+			}
+			snprintf(buf, 100, "ERROR mkdir, name exists, exit\n");
+			Writen(fd, buf, strlen(buf));
+			if (debug)
+				fprintf(stderr, "%s", buf);
+			exit(-1);
+		}
 		create_dir(str);
 		snprintf(buf, 100, "OK mkdir\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "OK mkdir\n");
+			fprintf(stderr, "%s", buf);
 		return;
 	}
 
 	if (memcmp(buf, "MKLINK ", 7) == 0) {	// MKLINK file_name linkto_name
 		char strnew[MAXLEN], strold[MAXLEN];
+		struct stat stbuf;
+		total_links++;
 		p = buf + 7;
 		while (*p && (*p != ' '))
 			p++;
@@ -562,6 +581,20 @@ void ProcessFile(int fd)
 		snprintf(strnew, MAXLEN, "/data/%s", buf + 7);
 		url_decode(p);
 		snprintf(strold, MAXLEN, "%s", p);
+		if (lstat(strnew, &stbuf) == 0) {
+			if (S_ISLNK(stbuf.st_mode)) {	// link exists
+				snprintf(buf, 100, "OK mklink, link in server\n");
+				Writen(fd, buf, strlen(buf));
+				if (debug)
+					fprintf(stderr, "OK mklink, link in server\n");
+				return;
+			}
+			snprintf(buf, 100, "ERROR mklink, name exists, exit\n");
+			Writen(fd, buf, strlen(buf));
+			if (debug)
+				fprintf(stderr, "ERROR mklink, name exists, exit\n");
+			exit(-1);
+		}
 		check_and_create_dir(strnew);
 		if (symlink(strold, strnew) == 0) {
 			snprintf(buf, 100, "OK mklink\n");
@@ -569,10 +602,11 @@ void ProcessFile(int fd)
 			if (debug)
 				fprintf(stderr, "OK mklink\n");
 		} else {
-			snprintf(buf, 100, "ERROR mklink\n");
+			snprintf(buf, 100, "ERROR mklink, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "ERROR mklink\n");
+				fprintf(stderr, "ERROR mklink, exit\n");
+			exit(-1);
 		}
 		return;
 	}
@@ -583,6 +617,7 @@ void ProcessFile(int fd)
 			fprintf(stderr, "%s unknown cmd\n", buf);
 		exit(-1);
 	}
+	total_files++;
 	if (buf[strlen(buf) - 1] == '\n')
 		buf[strlen(buf) - 1] = 0;
 	p = buf + 5;
@@ -636,14 +671,33 @@ void ProcessFile(int fd)
 	if (debug)
 		fprintf(stderr, "C->S: FILE %s %zu %s\n", md5sum, file_len, file_name);
 
-	if (access(file_name, F_OK) != -1) {	// file exists
-		strcpy(buf, "ERROR file exist\n");
+	struct stat stbuf;
+	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
+	if (lstat(file_name, &stbuf) == 0) {	// file exists, check if the same, I use lstat, not stat, right?
+		struct stat stbuf_hashed;
+		if (lstat(hashed_file, &stbuf_hashed) == 0) {	// hashed file exists
+			if (stbuf.st_ino == stbuf_hashed.st_ino) {	// the same file
+				snprintf(buf, 100, "OK same file in server\n");
+				Writen(fd, buf, strlen(buf));
+				if (debug)
+					fprintf(stderr, "OK same file in server\n");
+				return;
+			} else {
+				strcpy(buf, "ERROR file exist, but not the same md5sum, exit\n");
+				Writen(fd, buf, strlen(buf));
+				if (debug)
+					fprintf(stderr,
+						"file %s exist, but not the same md5sum, exit\n",
+						file_name);
+				exit(-1);
+			}
+		}
+		strcpy(buf, "ERROR file exist, not the same file, exit\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "file %s exist, return\n", file_name);
-		return;
+			fprintf(stderr, "file %s exist, not the same file, exit\n", file_name);
+		exit(-1);
 	}
-	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
 	if (access(hashed_file, F_OK) != 0)	// hashed file not exist, recv it
 		RecvHashedFile(fd, md5sum, hashed_file, file_len);
 
@@ -658,10 +712,11 @@ void ProcessFile(int fd)
 		return;
 	}
 
-	snprintf(buf, 100, "ERROR link file error %d\n", errno);
+	snprintf(buf, 100, "ERROR link file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "ERROR link file error %d\n", errno);
+		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
+	exit(-1);
 }
 
 void Process(int fd)
@@ -693,6 +748,8 @@ void Process(int fd)
 		if (fp == NULL) {
 			strcpy(buf, "ERROR open config file\n");
 			Writen(fd, buf, strlen(buf));
+			if (debug)
+				fprintf(stderr, "%s", buf);
 			exit(-1);
 		}
 		while (fgets(file_buf, MAXLEN, fp)) {
@@ -718,6 +775,8 @@ void Process(int fd)
 					perror("chroot");
 					snprintf(buf, MAXLEN, "ERROR chroot to %s\n", p);
 					Writen(fd, buf, strlen(buf));
+					if (debug)
+						fprintf(stderr, "%s", buf);
 					exit(-1);
 				}
 				setuid(work_uid);
