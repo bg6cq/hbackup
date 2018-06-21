@@ -64,7 +64,6 @@ def send_file(local_file_name, remote_name):
     if data[0:2] == 'OK':
         if debug:
             print ('S', data,end='')
-            print ('OK, exit with return code 0')
         print("")
         return
     if data[0:5] == 'ERROR':
@@ -100,7 +99,6 @@ def send_file(local_file_name, remote_name):
         if data[0:2] == 'OK':
             if debug:
                 print ('S', data,end='')
-                print ('OK, exit with return code 0')
             print("")
             return
     print ('S', data,end='')
@@ -200,12 +198,12 @@ print(file_name + " is dir")
 for root, dirs, files in os.walk(file_name, topdown=True):
     for name in files:
         local_file_name=os.path.join(root,name)
-        remote_file_name=file_new_name+'/'+root[len(file_name):]+'/'+name
+        remote_file_name=file_new_name+'/'+root[len(file_name)+1:]+'/'+name
         if os.sep == "\\":
-            remote_file_name.replace("\\","/")
+            remote_file_name = remote_file_name.replace("\\","/")
         if debug:
             print ("F root="+root+" name="+name+" file_new_name="+file_new_name)
-            print(local_file_name + "-->"+remote_file_name)
+            print(local_file_name + " --> "+remote_file_name)
         if os.path.islink(local_file_name):
             print(local_file_name + " is symlink", end='')
             linkto=os.readlink(local_file_name)
@@ -213,14 +211,14 @@ for root, dirs, files in os.walk(file_name, topdown=True):
         elif os.path.isfile(local_file_name):
             print(local_file_name, end='')
             if debug:
-                print(local_file_name + " is file")
+                print(" is file")
             send_file(local_file_name, remote_file_name)
         else:
             print(local_file_name, " SKIP")
 
     for name in dirs:
         local_file_name=os.path.join(root,name)
-        remote_file_name=file_new_name + '/' + root[len(file_name):] + '/' + name
+        remote_file_name=file_new_name + '/' + root[len(file_name)+1:] + '/' + name
         if os.path.islink(local_file_name):
             print(local_file_name + " is symlink", end='')
             linkto=os.readlink(local_file_name)
@@ -228,7 +226,7 @@ for root, dirs, files in os.walk(file_name, topdown=True):
             continue
         print(os.path.join(root,name) + " is dir", end='')
         if os.sep == "\\":
-            remote_file_name.replace("\\","/")
+            remote_file_name=remote_file_name.replace("\\","/")
         send_dir(remote_file_name)
 
 end_hbackup()
