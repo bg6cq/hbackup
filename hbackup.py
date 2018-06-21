@@ -219,7 +219,13 @@ for root, dirs, files in os.walk(file_name, topdown=True):
             print(local_file_name, " SKIP")
 
     for name in dirs:
+        local_file_name=os.path.join(root,name)
         remote_file_name=file_new_name + '/' + root[len(file_name):] + '/' + name
+        if os.path.islink(local_file_name):
+            print(local_file_name + " is symlink", end='')
+            linkto=os.readlink(local_file_name)
+            send_link(remote_file_name, linkto)
+            continue
         print(os.path.join(root,name) + " is dir", end='')
         if os.sep == "\\":
             remote_file_name.replace("\\","/")

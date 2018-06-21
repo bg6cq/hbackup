@@ -35,6 +35,9 @@ password2 work_dir2
 客户端验证密码后，会把文件上传到workdir目录下
 ```
 
+`hbackup_check_hashedfile.py` 是检查`hashed_file`目录下完整性的程序。
+
+
 ## 客户端
 
 客户端为python 3程序，命令行是:
