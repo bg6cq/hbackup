@@ -489,7 +489,7 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 	fclose(fp);
 	if (memcmp(md5sum, get_file_md5sum(file_name), 32) != 0) {
 		unlink(file_name);
-		strcpy(buf, "ERROR file md5sum\n");
+		strcpy(buf, "ERROR upload file md5sum error\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
