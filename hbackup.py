@@ -107,7 +107,7 @@ def send_file(local_file_name, remote_name):
     end_hbackup(-1)
 
 def usage():
-    print ('Usage: python %s [ -e err.log ] HostName PortNumber Password File/DirToSend [ Remote_Name ]' % (sys.argv[0]))
+    print ('Usage: python3 %s [ -e err.log ] HostName PortNumber Password File/DirToSend [ Remote_Name ]' % (sys.argv[0]))
     print ('  if -e err.log, error msg will be write to err.log, and continue to run')
     sys.exit();
 

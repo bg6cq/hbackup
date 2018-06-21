@@ -2,7 +2,8 @@
 
 优点：
 
-* 多次备份，相同的文件（文件长度和md5sum都一样）的仅传输1次，仅占用服务器上1份空间。
+* 非常简单，服务器端C代码900行，客户端python3代码200余行。
+* 多次备份，相同的文件（文件长度和md5sum都一样）仅传输1次，仅占用服务器上1份空间。
 * 客户端仅允许上传新文件，无法读文件，也永远无法覆盖之前备份过的文件。即便备份密码泄漏也无数据泄漏隐患。
 
 ## 服务器端
@@ -20,7 +21,7 @@ Usage:
 
     -d              enable debug
 
-config_file内容是如下的若干行（work_dir需要在备份文件之前建立，并且对user_name可读写）:
+config_file配置文件，内容是如下的若干行（work_dir需要在备份文件之前建立，并且对user_name可读写）:
 password work_dir
 password2 work_dir2
 
@@ -31,11 +32,7 @@ password2 work_dir2
 -u 是上传后文件的属主
 -d 是开启调试模式，会显示一些调试信息
 
-配置文件格式为：
-密码 目录
-密码2 目录2
-
-客户端验证密码后，会把文件上传到目录下
+客户端验证密码后，会把文件上传到workdir目录下
 ```
 
 ## 客户端
@@ -43,7 +40,7 @@ password2 work_dir2
 客户端为python 3程序，命令行是:
 ```
 python3 hbackup.py 
-Usage: python hbackup.py [ -e err.log ] <HostName> <PortNumber> <Password> <File/DirToSend> [ new_name ]
+Usage: python3 hbackup.py [ -e err.log ] HostName PortNumber Password File/DirToSend [ new_name ]
 
 * 如果带有参数`-e err.log`，出现备份时错误时，会将未备份的文件信息记录在文件`err.log`，并继续其他文件的备份。
 * 如果不带参数`-e err.log`，出现错误立即停止后续备份过程。
@@ -55,7 +52,7 @@ Usage: python hbackup.py [ -e err.log ] <HostName> <PortNumber> <Password> <File
 
 系统工作的前提：不存在同样长度的文件，它们的md5sum相同。
 
-假定工作目录是/，系统中有2个特殊的文件夹:
+假定工作目录是/，工作目录中有2个文件夹:
 
 * hashed_file/，存放有所有的备份文件，这个目录仅仅新增文件。格式如`hashed_file/ab/cd/abcdefxxxx_size`，其中abceefxxxxxx是文件的md5sum(长度是32字节，全部是小写字母)，size是文件长度。为了减少单个目录下文件数量，分2级目录散列存储。
 * data/，存放备份文件。备份时，同样的文件在hashed_file下仅仅存1份。data/目录下的文件是到hashed_file的hard link，不占额外空间。也就是说相同文件（md5sum相同，长度相同）的文件，无论备份多少次，只存1份。
