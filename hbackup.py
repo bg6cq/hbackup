@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 
-debug = False
-
 import socket
 import sys
 import os
@@ -9,6 +7,11 @@ import datetime
 import time
 import urllib.parse
 import hashlib
+import argparse
+
+debug = False
+haserror = False
+total_files = total_dirs = total_links = total_file_len = upload_file_len = 0
 
 
 def md5sum(filename, blocksize=1024 * 1024):
@@ -23,9 +26,11 @@ def end_hbackup(retcode=0):
     s.send('END\n'.encode())
     data = s.recv(100).decode()
     print('S', data, end='')
-    print('end')
     print('FDL: %d/%d/%d U/A: %d/%d' % (total_files, total_dirs, total_links,
                                         upload_file_len, total_file_len))
+    if haserror:
+        print("Encountered error when backuping file")
+        print("Error msg append to " + err_log + ", please check it")
     sys.exit(retcode)
 
 
@@ -113,17 +118,9 @@ def send_file(local_file_name, remote_name):
     end_hbackup(-1)
 
 
-def usage():
-    print(
-        'Usage: python3 %s [ -e err.log ] HostName PortNumber Password File/DirToSend [ Remote_Name ]'
-        % (sys.argv[0]))
-    print(
-        '  if -e err.log, error msg will be write to err.log, and continue to run'
-    )
-    sys.exit()
-
-
 def log_err(msg):
+    global haserror
+    haserror = True
     if err_log == "":
         print(msg)
         exit(-1)
@@ -133,33 +130,30 @@ def log_err(msg):
     f.close()
 
 
-total_files = total_dirs = total_links = total_file_len = upload_file_len = 0
-
-if len(sys.argv) < 5:
-    usage()
-
-err_log = ""
-if sys.argv[1] == "-e":
-    if len(sys.argv) < 7:
-        usage()
-    err_log = sys.argv[2]
-    host = sys.argv[3]
-    port = int(sys.argv[4])
-    pass_word = sys.argv[5]
-    file_name = sys.argv[6]
-    if len(sys.argv) == 8:
-        file_new_name = sys.argv[7]
-    else:
-        file_new_name = file_name
+parser = argparse.ArgumentParser(description='hbackup')
+parser.add_argument(dest='hostname', metavar='HostName')
+parser.add_argument(dest='port', metavar='TcpPort', type=int)
+parser.add_argument(dest='password', metavar='Password')
+parser.add_argument(dest='file_name', metavar='File/DirToSend')
+parser.add_argument(dest='remote_name', metavar='RemoteName', nargs='?')
+parser.add_argument('-d', dest='debug', action='store_true', help='debug mode')
+parser.add_argument(
+    '-e',
+    dest='err_log',
+    metavar='err_log_file',
+    action='store',
+    help='error msg will be append to err_log_file, and continue to run')
+args = parser.parse_args()
+err_log = args.err_log
+debug = args.debug
+host = args.hostname
+port = args.port
+pass_word = args.password
+file_name = args.file_name
+if args.remote_name == None:
+    file_new_name = file_name
 else:
-    host = sys.argv[1]
-    port = int(sys.argv[2])
-    pass_word = sys.argv[3]
-    file_name = sys.argv[4]
-    if len(sys.argv) == 6:
-        file_new_name = sys.argv[5]
-    else:
-        file_new_name = file_name
+    file_new_name = args.remote_name
 
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -192,13 +186,13 @@ if data[0:2] != 'OK':
     sys.exit(-1)
 
 if os.path.islink(file_name):
-    print(file_name + " is symlink")
+    print(file_name + " is symlink", end='')
     linkto = os.readlink(file_name)
     send_link(file_new_name, linkto)
     end_hbackup()
 
 if os.path.isfile(file_name):
-    print(file_name + " is file")
+    print(file_name + " is file", end='')
     send_file(file_name, file_new_name)
     end_hbackup()
 
