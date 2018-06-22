@@ -1,5 +1,7 @@
 ## 基于md5sum的文件备份程序
 
+Author: Zhang Huanjie james@ustc.edu.cn
+
 优点：
 
 * 非常简单，服务器端C代码900行，客户端python3代码200余行。
