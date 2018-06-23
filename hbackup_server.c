@@ -445,7 +445,8 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 	check_and_create_dir(file_name);
 	FILE *fp = fopen(file_name, "w");
 	if (fp == NULL) {
-		snprintf(buf, MAXLEN, "ERROR open tmpfile %s for write\n", file_name);
+		const char format[] = "ERROR open tmpfile %.*s for write\n";
+		snprintf(buf, MAXLEN, format, (int)(MAXLEN-sizeof(format)), file_name);
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
