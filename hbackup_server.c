@@ -1,4 +1,4 @@
-/* translog_server
+/* hbackup_server
 	  by james@ustc.edu.cn 2018.06.04
 */
 
@@ -37,6 +37,7 @@ int daemon_proc;		/* set nonzero by daemon_init() */
 int debug = 0;
 
 int my_port;
+int ipv6 = 0;
 char config_file[MAXLEN];
 char work_user[MAXLEN];
 int work_uid;
@@ -45,40 +46,33 @@ size_t total_files, total_dirs, total_links;
 
 char *get_file_md5sum(char *file_name)
 {
-	int n;
-	MD5_CTX c;
-	char buf[512];
-	ssize_t bytes;
 	FILE *fp;
-
+	MD5_CTX c;
+	char buf[MAXLINE];
+	int n;
+	ssize_t bytes;
 	unsigned char out[MD5_DIGEST_LENGTH];
-	static char outhex[64];
+	static char outhex[MD5_DIGEST_LENGTH * 2 + 1];
 
+	outhex[0] = 0;
 	MD5_Init(&c);
 	fp = fopen(file_name, "r");
-	if (fp == NULL) {
-		outhex[0] = 0;
-		return (char *)outhex;
-	}
+	if (fp == NULL)
+		return outhex;
 
-	bytes = fread(buf, 1, 512, fp);
-
+	bytes = fread(buf, 1, MAXLINE, fp);
 	while (bytes > 0) {
 		MD5_Update(&c, buf, bytes);
-		bytes = fread(buf, 1, 512, fp);
+		bytes = fread(buf, 1, MAXLINE, fp);
 	}
-
-	MD5_Final(out, &c);
 	fclose(fp);
-	outhex[0] = 0;
+	MD5_Final(out, &c);
 	for (n = 0; n < MD5_DIGEST_LENGTH; n++) {
 		snprintf(outhex + n * 2, 3, "%02x", out[n]);
 	}
-
 	if (debug)
 		fprintf(stderr, "md5sum of file %s is %s\n", file_name, outhex);
-
-	return (outhex);
+	return outhex;
 }
 
 void err_doit(int errnoflag, int level, const char *fmt, va_list ap)
@@ -93,9 +87,9 @@ void err_doit(int errnoflag, int level, const char *fmt, va_list ap)
 		snprintf(buf + n, sizeof(buf) - n, ": %s", strerror(errno_save));
 	strcat(buf, "\n");
 
-	if (daemon_proc) {
+	if (daemon_proc)
 		syslog(level, "%s", buf);
-	} else {
+	else {
 		fflush(stdout);	/* in case stdout and stderr are the same */
 		fputs(buf, stderr);
 		fflush(stderr);
@@ -298,7 +292,6 @@ int bind_and_listen(void)
 {
 	int listenfd;
 	int enable = 1;
-	int ipv6 = 0;
 
 	if (ipv6)
 		listenfd = socket(AF_INET6, SOCK_STREAM, 0);
@@ -428,7 +421,6 @@ void check_and_create_dir(char *file_name)
 	}
 }
 
-
 // return 1 OK
 // return 0 error
 
@@ -446,7 +438,7 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 	FILE *fp = fopen(file_name, "w");
 	if (fp == NULL) {
 		const char format[] = "ERROR open tmpfile %.*s for write\n";
-		snprintf(buf, MAXLEN, format, (int)(MAXLEN-sizeof(format)), file_name);
+		snprintf(buf, MAXLEN, format, (int)(MAXLEN - sizeof(format)), file_name);
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
@@ -455,8 +447,8 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 	if (debug)
 		fprintf(stderr, "tmpfile %s open for write\n", file_name);
 	while (1) {
-		size_t remains = file_len - file_got;
 		char buf[MAXLINE];
+		size_t remains = file_len - file_got;
 		if (remains == 0)
 			break;
 		if (remains >= MAXLINE)
@@ -505,7 +497,7 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 	snprintf(buf, 100, "ERROR rename uploaded file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "ERROR rename file error %d, exit\n", errno);
+		fprintf(stderr, "%s", buf);
 	exit(-1);
 }
 
@@ -544,24 +536,26 @@ void ProcessFile(int fd)
 		struct stat stbuf;
 		total_dirs++;
 		p = buf + 6;
+		if (debug)
+			fprintf(stderr, "C->S %s ", buf);
 		url_decode(p);
 		snprintf(str, MAXLEN, "/data/%s", p);
 		if (stat(str, &stbuf) == 0) {
 			if (S_ISDIR(stbuf.st_mode)) {	// dir exists
-				snprintf(buf, 100, "OK mkdir, dir in server\n");
+				strcpy(buf, "OK mkdir, dir in server\n");
 				Writen(fd, buf, strlen(buf));
 				if (debug)
-					fprintf(stderr, "OK mkdir, dir in server\n");
+					fprintf(stderr, "%s", buf);
 				return;
 			}
-			snprintf(buf, 100, "ERROR mkdir, name exists, exit\n");
+			strcpy(buf, "ERROR mkdir, name exists, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
 				fprintf(stderr, "%s", buf);
 			exit(-1);
 		}
 		create_dir(str);
-		snprintf(buf, 100, "OK mkdir\n");
+		strcpy(buf, "OK mkdir\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
 			fprintf(stderr, "%s", buf);
@@ -572,6 +566,8 @@ void ProcessFile(int fd)
 		char strnew[MAXLEN], strold[MAXLEN];
 		struct stat stbuf;
 		total_links++;
+		if (debug)
+			fprintf(stderr, "C->S %s ", buf);
 		p = buf + 7;
 		while (*p && (*p != ' '))
 			p++;
@@ -588,29 +584,29 @@ void ProcessFile(int fd)
 		snprintf(strold, MAXLEN, "%s", p);
 		if (lstat(strnew, &stbuf) == 0) {
 			if (S_ISLNK(stbuf.st_mode)) {	// link exists
-				snprintf(buf, 100, "OK mklink, link in server\n");
+				strcpy(buf, "OK mklink, link in server\n");
 				Writen(fd, buf, strlen(buf));
 				if (debug)
-					fprintf(stderr, "OK mklink, link in server\n");
+					fprintf(stderr, "%s", buf);
 				return;
 			}
-			snprintf(buf, 100, "ERROR mklink, name exists, exit\n");
+			strcpy(buf, "ERROR mklink, name exists, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "ERROR mklink, name exists, exit\n");
+				fprintf(stderr, "%s", buf);
 			exit(-1);
 		}
 		check_and_create_dir(strnew);
 		if (symlink(strold, strnew) == 0) {
-			snprintf(buf, 100, "OK mklink\n");
+			strcpy(buf, "OK mklink\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "OK mklink\n");
+				fprintf(stderr, "%s", buf);
 		} else {
-			snprintf(buf, 100, "ERROR mklink, exit\n");
+			strcpy(buf, "ERROR mklink, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "ERROR mklink, exit\n");
+				fprintf(stderr, "%s", buf);
 			exit(-1);
 		}
 		return;
@@ -618,8 +614,10 @@ void ProcessFile(int fd)
 // C -> FILE md5sum file_len file_name\n
 //
 	if (memcmp(buf, "FILE ", 5) != 0) {	// FILE md5sum file_len file_name
+		strcpy(buf, "ERROR unknow cmd, exit\n");
+		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s unknown cmd\n", buf);
+			fprintf(stderr, "%s", buf);
 		exit(-1);
 	}
 	total_files++;
@@ -674,54 +672,43 @@ void ProcessFile(int fd)
 	url_decode(p);
 	snprintf(file_name, MAXLEN, "/data/%s", p);
 	if (debug)
-		fprintf(stderr, "C->S: FILE %s %zu %s\n", md5sum, file_len, file_name);
+		fprintf(stderr, "C->S FILE %s %zu %s ", md5sum, file_len, file_name);
 
 	struct stat stbuf;
 	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
 	if (lstat(file_name, &stbuf) == 0) {	// file exists, check if the same, I use lstat, not stat, right?
 		struct stat stbuf_hashed;
-		if (lstat(hashed_file, &stbuf_hashed) == 0) {	// hashed file exists
-			if (stbuf.st_ino == stbuf_hashed.st_ino) {	// the same file
-				snprintf(buf, 100, "OK same file in server\n");
-				Writen(fd, buf, strlen(buf));
-				if (debug)
-					fprintf(stderr, "OK same file in server\n");
-				return;
-			} else {
-				strcpy(buf, "ERROR file exist, but not the same md5sum\n");
-				Writen(fd, buf, strlen(buf));
-				if (debug)
-					fprintf(stderr,
-						"file %s exist, but not the same md5sum\n",
-						file_name);
-				return;
-			}
-		}
-		strcpy(buf, "ERROR file exist, not the same file\n");
+		if (lstat(hashed_file, &stbuf_hashed) == 0) {	// get hashed file stat
+			if (stbuf.st_ino == stbuf_hashed.st_ino)	// the same file
+				strcpy(buf, "OK same file in server\n");
+			else
+				strcpy(buf, "ERROR file exists, but not the same md5sum\n");
+		} else
+			strcpy(buf, "ERROR file exists, hashed file not exists\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "file %s exist, not the same file\n", file_name);
+			fprintf(stderr, "%s", buf);
 		return;
 	}
-	if (access(hashed_file, F_OK) != 0)	// hashed file not exist, recv it
-		if(RecvHashedFile(fd, md5sum, hashed_file, file_len)==0)
+	if (access(hashed_file, F_OK) != 0)	// hashed file not exists, recv it
+		if (RecvHashedFile(fd, md5sum, hashed_file, file_len) == 0)
 			return;
 
 	check_and_create_dir(file_name);
 
 	n = link(hashed_file, file_name);
 	if (n == 0) {		// OK
-		snprintf(buf, 100, "OK file in server\n");
+		strcpy(buf, "OK file in server\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "OK file in server\n");
+			fprintf(stderr, "%s", buf);
 		return;
 	}
 
 	snprintf(buf, 100, "ERROR link file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "ERROR link file error %d, exit\n", errno);
+		fprintf(stderr, "%s", buf);
 	exit(-1);
 }
 
@@ -795,9 +782,13 @@ void Process(int fd)
 			break;
 		strcpy(buf, "ERROR password\n");
 		Writen(fd, buf, strlen(buf));
+		if (debug)
+			fprintf(stderr, "%s", buf);
 	}
 	strcpy(buf, "OK password ok\n");
 	Writen(fd, buf, strlen(buf));
+	if (debug)
+		fprintf(stderr, "%s", buf);
 
 	while (1)
 		ProcessFile(fd);
@@ -806,12 +797,13 @@ void Process(int fd)
 void usage(void)
 {
 	printf("Usage:\n");
-	printf("./translog_server options\n");
+	printf("./translog_server -p port -f config_file [ -u user_name ] [ -6 ] [ -d ]\n");
 	printf(" options:\n");
 	printf("    -p port\n");
 	printf("    -f config_file\n");
 	printf("    -u user_name    change to user before write file\n");
 	printf("\n");
+	printf("    -6              enable ipv6 listen\n");
 	printf("    -d              enable debug\n");
 	printf("\n");
 	printf("config_file:\n");
@@ -828,7 +820,7 @@ int main(int argc, char *argv[])
 	if (argc < 7)
 		usage();
 
-	while ((c = getopt(argc, argv, "p:f:u:d")) != EOF)
+	while ((c = getopt(argc, argv, "p:f:u:6d")) != EOF)
 		switch (c) {
 		case 'p':
 			my_port = atoi(optarg);;
@@ -845,6 +837,9 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "user %s not found\n", work_user);
 				exit(-1);
 			}
+			break;
+		case '6':
+			ipv6 = 1;
 			break;
 		case 'd':
 			debug = 1;
@@ -882,6 +877,8 @@ int main(int argc, char *argv[])
 	while (1) {
 		int infd;
 		int pid;
+		if(debug)
+			fprintf(stderr, "%s", "waiting client..\n");
 		infd = accept(listenfd, NULL, 0);
 		if (infd < 0)
 			continue;

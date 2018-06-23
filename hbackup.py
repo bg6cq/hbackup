@@ -145,6 +145,8 @@ parser.add_argument(
     help='error msg will be append to err_log_file, and continue to run')
 args = parser.parse_args()
 err_log = args.err_log
+if err_log == None:
+    err_log = ""
 debug = args.debug
 host = args.hostname
 port = args.port
@@ -154,6 +156,7 @@ if args.remote_name == None:
     file_new_name = file_name
 else:
     file_new_name = args.remote_name
+
 
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
