@@ -8,11 +8,12 @@ import time
 import urllib.parse
 import hashlib
 import argparse
+import re
 
 debug = False
 haserror = False
 total_files = total_dirs = total_links = total_file_len = upload_file_len = 0
-
+exclude_file_name_patterns = []
 
 def md5sum(filename, blocksize=1024 * 1024):
     hash = hashlib.md5()
@@ -136,6 +137,7 @@ parser.add_argument(dest='port', metavar='TcpPort', type=int)
 parser.add_argument(dest='password', metavar='Password')
 parser.add_argument(dest='file_name', metavar='File/DirToSend')
 parser.add_argument(dest='remote_name', metavar='RemoteName', nargs='?')
+parser.add_argument('-x', dest='exclude_file_name', action='append', metavar='exclude_file_regex', help='exclude_file_name_regex')
 parser.add_argument('-d', dest='debug', action='store_true', help='debug mode')
 parser.add_argument(
     '-e',
@@ -152,11 +154,17 @@ host = args.hostname
 port = args.port
 pass_word = args.password
 file_name = args.file_name
+if args.exclude_file_name == None:
+    exclude_file_name_patterns = []
+else:
+    for exname in args.exclude_file_name:
+        print("exclude: "+exname)
+        exclude_file_name_patterns.append(re.compile(exname))
+
 if args.remote_name == None:
     file_new_name = file_name
 else:
     file_new_name = args.remote_name
-
 
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -208,6 +216,15 @@ print(file_name + " is dir")
 for root, dirs, files in os.walk(file_name, topdown=True):
     for name in files:
         local_file_name = os.path.join(root, name)
+        if exclude_file_name_patterns:
+            skip = False
+            for expatterns in exclude_file_name_patterns:
+                if expatterns.match(local_file_name) != None:
+                    print(local_file_name + " SKIP excluded")
+                    skip = True
+                    break
+            if skip:
+                continue
         remote_file_name = file_new_name + '/' + root[len(file_name) +
                                                       1:] + '/' + name
         if os.sep == "\\":
@@ -230,6 +247,15 @@ for root, dirs, files in os.walk(file_name, topdown=True):
 
     for name in dirs:
         local_file_name = os.path.join(root, name)
+        if exclude_file_name_patterns:
+            skip = False
+            for expatterns in exclude_file_name_patterns:
+                if expatterns.match(local_file_name) != None:
+                    print(local_file_name + " SKIP excluded")
+                    skip = True
+                    break
+            if skip:
+                continue
         remote_file_name = file_new_name + '/' + root[len(file_name) +
                                                       1:] + '/' + name
         if os.path.islink(local_file_name):
