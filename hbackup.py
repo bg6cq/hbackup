@@ -12,7 +12,7 @@ import re
 
 debug = False
 haserror = False
-total_files = total_dirs = total_links = total_file_len = upload_file_len = 0
+total_files = total_dirs = total_links = skipped_files = total_file_len = upload_file_len = 0
 exclude_file_name_patterns = []
 
 def md5sum(filename, blocksize=1024 * 1024):
@@ -27,7 +27,7 @@ def end_hbackup(retcode=0):
     s.send('END\n'.encode())
     data = s.recv(100).decode()
     print('S', data, end='')
-    print('FDL: %d/%d/%d U/A: %d/%d' % (total_files, total_dirs, total_links,
+    print('FDL: %d/%d/%d, skipped %d U/A: %d/%d' % (total_files, total_dirs, total_links, skipped_files,
                                         upload_file_len, total_file_len))
     if haserror:
         print("Encountered error when backuping file")
@@ -140,6 +140,12 @@ parser.add_argument(dest='remote_name', metavar='RemoteName', nargs='?')
 parser.add_argument('-x', dest='exclude_file_name', action='append', metavar='exclude_file_regex', help='exclude_file_name_regex')
 parser.add_argument('-d', dest='debug', action='store_true', help='debug mode')
 parser.add_argument(
+    '-t',
+    dest='days',
+    metavar='n',
+    action='store',
+    help='skip n days old files', type=int)
+parser.add_argument(
     '-e',
     dest='err_log',
     metavar='err_log_file',
@@ -165,6 +171,12 @@ if args.remote_name == None:
     file_new_name = file_name
 else:
     file_new_name = args.remote_name
+
+if args.days == None:
+    file_mtime_start = None
+else:
+    file_mtime_start = time.mktime((datetime.datetime.now() - datetime.timedelta(days=args.days)).timetuple())
+    print("skip file mtime before " + datetime.datetime.fromtimestamp(file_mtime_start).strftime('%Y-%m-%d %H:%M:%S'))
 
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -224,6 +236,12 @@ for root, dirs, files in os.walk(file_name, topdown=True):
                     skip = True
                     break
             if skip:
+                skipped_files += 1
+                continue
+        if file_mtime_start != None:
+           if os.lstat(local_file_name).st_mtime < file_mtime_start:
+                print(local_file_name + " SKIP old file")
+                skipped_files += 1
                 continue
         remote_file_name = file_new_name + '/' + root[len(file_name) +
                                                       1:] + '/' + name
@@ -255,6 +273,12 @@ for root, dirs, files in os.walk(file_name, topdown=True):
                     skip = True
                     break
             if skip:
+                skipped_files += 1
+                continue
+        if file_mtime_start != None:
+           if os.lstat(local_file_name).st_mtime < file_mtime_start:
+                print(local_file_name + " SKIP old file")
+                skipped_files += 1
                 continue
         remote_file_name = file_new_name + '/' + root[len(file_name) +
                                                       1:] + '/' + name

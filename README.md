@@ -20,7 +20,7 @@ Usage:
     -p port
     -f config_file
     -u user_name    change to user before write file
-
+    -6              enable ipv6 listen
     -d              enable debug
 
 config_file配置文件，内容是如下的若干行（work_dir需要在备份文件之前建立，并且对user_name可读写）:
@@ -45,10 +45,12 @@ password2 work_dir2
 客户端为python 3程序，命令行是:
 ```
 python3 hbackup.py 
-Usage: python3 hbackup.py [ -e err.log ] HostName PortNumber Password File/DirToSend [ new_name ]
+Usage: python3 hbackup.py [ -e err.log ] [ -x exclude_file_regex ] [ -t n ] [ -d ] HostName PortNumber Password File/DirToSend [ new_name ]
 
 * 如果带有参数`-e err.log`，出现备份时错误时，会将未备份的文件信息记录在文件`err.log`，并继续其他文件的备份。
 * 如果不带参数`-e err.log`，出现错误立即停止后续备份过程。
+* -x 可以有若干个，匹配正则表达式的会跳过
+* -t n，跳过最后修改时间是n天前的文件
 * 最后的可选参数是服务器上的目录名，每次备份可以使用不同的名字区分。
 
 ```
