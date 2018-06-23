@@ -1,6 +1,9 @@
 ## 基于md5sum的文件备份程序
 
+https://github.com/bg6cq/hbackup
+
 Author: Zhang Huanjie james@ustc.edu.cn
+
 
 优点：
 
@@ -49,7 +52,7 @@ Usage: python3 hbackup.py [ -e err.log ] [ -x exclude_file_regex ] [ -t n ] [ -d
 
 * 如果带有参数`-e err.log`，出现备份时错误时，会将未备份的文件信息记录在文件`err.log`，并继续其他文件的备份。
 * 如果不带参数`-e err.log`，出现错误立即停止后续备份过程。
-* -x 可以有若干个，匹配正则表达式的会跳过
+* -x 可以有若干个，跳过匹配正则表达式的文件，如 -x ".*test" 可以跳过所有文件名中有test的文件
 * -t n，跳过最后修改时间是n天前的文件
 * 最后的可选参数是服务器上的目录名，每次备份可以使用不同的名字区分。
 
