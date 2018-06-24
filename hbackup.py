@@ -16,16 +16,17 @@ total_files = total_dirs = total_links = skipped_files = total_file_len = upload
 exclude_file_name_patterns = []
 md5sum_cache_file = None
 md5sum_cache = {}
+md5sum_cache_lookup = md5sum_cache_hit = md5sum_cache_update = 0
 
 #md5sum_cache = { filename: [st_mtime, md5sum], ... }
 #md5sum_cache_file
-#len md5sum file_name
+#st_mtime md5sum file_name
 
 
 def load_md5sum_cache(md5sum_cache_file):
     global md5sum_cache
     BUFSIZE = 1024
-    print("reading md5sum_cache_file ...")
+    print("loading md5sum_cache from " + md5sum_cache_file + " ...")
     f = open(md5sum_cache_file, 'r')
     cnt = 0
     try:
@@ -47,43 +48,49 @@ def load_md5sum_cache(md5sum_cache_file):
 
 
 def save_md5sum_cache(md5sum_cache_file):
-    print("saveing md5sum_cache_file ...")
+    print("md5sum_cache lookup/hit/update %d/%d/%d" %
+          (md5sum_cache_lookup, md5sum_cache_hit, md5sum_cache_update))
+    print("saving md5sum_cache to " + md5sum_cache_file + " ...")
     f = open(md5sum_cache_file, "w")
-    c = 0
+    cnt = 0
     for key, value in md5sum_cache.items():
         f.write("%d %s %s\n" % (value[0], value[1], key))
-        c += 1
+        cnt += 1
     f.close()
-    print("saved md5sum_cache %d lines" % c)
+    print("saved md5sum_cache %d lines" % cnt)
 
 
 def md5sum(filename, blocksize=1024 * 1024):
-    global md5sum_cache
+    global md5sum_cache, md5sum_cache_lookup, md5sum_cache_hit, md5sum_cache_update
+    st_mtime = None
     if md5sum_cache_file != None:
         v = md5sum_cache.get(filename)
         if v != None:
-            if int(os.stat(filename).st_mtime) == v[0]:
+            md5sum_cache_lookup += 1
+            st_mtime = int(os.stat(filename).st_mtime)
+            if st_mtime == v[0]:
+                md5sum_cache_hit += 1
                 if debug:
-                    print("using md5sumcache")
+                    print("using md5sum_cache")
                 return v[1]
             else:
                 if debug:
-                    print("file st_mtime %d, md5sum_cache st_mtime %d" % (int(
-                        os.stat(filename).st_mtime), v[0]))
+                    print("file st_mtime %d != md5sum_cache st_mtime %d" %
+                          (st_mtime, v[0]))
         else:
             if debug:
                 print("not in md5sum_cache")
-
     hash = hashlib.md5()
     with open(filename, "rb") as f:
         for block in iter(lambda: f.read(blocksize), b""):
             hash.update(block)
     md5sum_str = hash.hexdigest()
     if md5sum_cache_file != None:
-        v = [int(os.stat(filename).st_mtime), md5sum_str]
+        v = [st_mtime, md5sum_str]
         md5sum_cache.update({filename: v})
+        md5sum_cache_update += 1
     if debug:
-        print("update md5sum_cache")
+        print("updating md5sum_cache")
     return md5sum_str
 
 
@@ -229,7 +236,9 @@ parser.add_argument(
     dest='md5sum_cache_file',
     metavar='md5sum_cache_file',
     action='store',
-    help='md5sum_cache_file')
+    help=
+    'md5sum_cache will be used if the file\'s mtime does not change. md5sum_cache_file must be created before use'
+)
 args = parser.parse_args()
 err_log = args.err_log
 if err_log == None:
