@@ -48,12 +48,13 @@ password2 work_dir2
 客户端为python 3程序，命令行是:
 ```
 python3 hbackup.py 
-Usage: python3 hbackup.py [ -e err.log ] [ -x exclude_file_regex ] [ -t n ] [ -d ] HostName PortNumber Password File/DirToSend [ new_name ]
+Usage: python3 hbackup.py [ -e err.log ] [ -x exclude_file_regex ] [ -t n ] [ -m md5sum_cache_file ] [ -d ] HostName PortNumber Password File/DirToSend [ new_name ]
 
 * 如果带有参数`-e err.log`，出现备份时错误时，会将未备份的文件信息记录在文件`err.log`，并继续其他文件的备份。
 * 如果不带参数`-e err.log`，出现错误立即停止后续备份过程。
 * -x 可以有若干个，跳过匹配正则表达式的文件，如 -x ".*test" 可以跳过所有文件名中有test的文件
 * -t n，跳过最后修改时间是n天前的文件
+* -m md5sum_cache_file, 指明一个存放md5sum的缓存文件，第一次使用请先创建空文件。如果文件的最后修改时间不变，就省去读文件计算md5sum的时间，直接使用缓存文件中记录的。
 * 最后的可选参数是服务器上的目录名，每次备份可以使用不同的名字区分。
 
 ```
