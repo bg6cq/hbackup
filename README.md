@@ -1,12 +1,14 @@
 ## 基于md5sum的文件备份程序
 
+https://github.com/bg6cq/hbackup
+
 Author: Zhang Huanjie james@ustc.edu.cn
 
 优点：
 
-* 非常简单，服务器端C代码900行，客户端python3代码200余行。
+* 非常简单，服务器端C代码900行，客户端python代码400行。
 * 多次备份，相同的文件（文件长度和md5sum都一样）仅传输1次，仅占用服务器上1份空间。
-* 客户端仅允许上传新文件，无法读文件，也永远无法覆盖之前备份过的文件。即便备份密码泄漏也无数据泄漏隐患。
+* 客户端仅允许上传新文件，无法读文件，无法覆盖之前备份过的文件。即便备份密码泄漏也无数据泄漏隐患。
 
 ## 服务器端
 
@@ -20,7 +22,7 @@ Usage:
     -p port
     -f config_file
     -u user_name    change to user before write file
-
+    -6              enable ipv6 listen
     -d              enable debug
 
 config_file配置文件，内容是如下的若干行（work_dir需要在备份文件之前建立，并且对user_name可读写）:
@@ -42,13 +44,16 @@ password2 work_dir2
 
 ## 客户端
 
-客户端为python 3程序，命令行是:
+客户端为hbackup.py hbackup.py2，分别是Python 3/Python 2程序，命令行是:
 ```
 python3 hbackup.py 
-Usage: python3 hbackup.py [ -e err.log ] HostName PortNumber Password File/DirToSend [ new_name ]
+Usage: python3 hbackup.py [ -e err.log ] [ -x exclude_file_regex ] [ -t n ] [ -m md5sum_cache_file ] [ -d ] HostName PortNumber Password File/DirToSend [ new_name ]
 
 * 如果带有参数`-e err.log`，出现备份时错误时，会将未备份的文件信息记录在文件`err.log`，并继续其他文件的备份。
 * 如果不带参数`-e err.log`，出现错误立即停止后续备份过程。
+* -x 可以有若干个，跳过匹配正则表达式的文件，如 -x ".*test" 可以跳过所有文件名中有test的文件
+* -t n，跳过最后修改时间是n天前的文件
+* -m md5sum_cache_file, 指明一个存放md5sum信息的缓存文件，第一次使用请先创建空文件。如果某个文件的最后修改时间不变，直接使用缓存文件中记录的md5sum，省去读文件计算md5sum开销，大大减少I/O操作。如果需要重算md5sum，只要将该文件清空即可。
 * 最后的可选参数是服务器上的目录名，每次备份可以使用不同的名字区分。
 
 ```
