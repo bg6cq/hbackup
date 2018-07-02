@@ -4,6 +4,8 @@ https://github.com/bg6cq/hbackup
 
 Author: Zhang Huanjie james@ustc.edu.cn
 
+单机备份推荐 [https://github.com/laurent22/rsync-time-backup](https://github.com/laurent22/rsync-time-backup)
+
 优点：
 
 * 非常简单，服务器端C代码900行，客户端python代码400行。
