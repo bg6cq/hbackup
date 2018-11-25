@@ -189,6 +189,10 @@ def send_file(local_file_name, remote_name):
                 print('S', data, end='')
             print("")
             return
+        if data[0:5] == 'ERROR':
+            print(' S', data, end='')
+            log_err(local_file_name + ' --> ' + remote_name + ' ' + data)
+            return
     print('S', data, end='')
     end_hbackup(-1)
 
