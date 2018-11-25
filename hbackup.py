@@ -33,7 +33,7 @@ def load_md5sum_cache(md5sum_cache_file):
         lines = f.readlines(BUFSIZE)
         while lines:
             for line in lines:
-                c = line.split(' ')
+                c = line.split(' ', 2)
                 if len(c) != 3:
                     print("error in md5sum_cache_file: " + line + "\n")
                     sys.exit(-1)
