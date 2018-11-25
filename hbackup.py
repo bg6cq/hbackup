@@ -65,9 +65,9 @@ def md5sum(filename, blocksize=1024 * 1024):
     st_mtime = None
     if md5sum_cache_file != None:
         v = md5sum_cache.get(filename)
+        st_mtime = int(os.stat(filename).st_mtime)
         if v != None:
             md5sum_cache_lookup += 1
-            st_mtime = int(os.stat(filename).st_mtime)
             if st_mtime == v[0]:
                 md5sum_cache_hit += 1
                 if debug:
