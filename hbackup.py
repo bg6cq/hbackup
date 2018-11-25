@@ -243,6 +243,8 @@ args = parser.parse_args()
 err_log = args.err_log
 if err_log == None:
     err_log = ""
+else:
+    print("Note: error msg will be append to " + err_log + ", and countiue to run")
 debug = args.debug
 host = args.hostname
 port = args.port
