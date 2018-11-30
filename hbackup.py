@@ -22,6 +22,15 @@ md5sum_cache_lookup = md5sum_cache_hit = md5sum_cache_update = 0
 #md5sum_cache_file
 #st_mtime md5sum file_name
 
+def bad_filename(filename):
+    temp = filename.encode(sys.getfilesystemencoding(), errors='surrogateescape')
+    return temp.decode('latin-1')
+
+def print_str(str, end='\n',):
+    try:
+        print(name, end=end)
+    except UnicodeEncodeError:
+        print(bad_filename(name), end=end)
 
 def load_md5sum_cache(md5sum_cache_file):
     global md5sum_cache
@@ -145,7 +154,7 @@ def send_file(local_file_name, remote_name):
     file_size = os.path.getsize(local_file_name)
     total_file_len += file_size
     if debug:
-        print(filemd5sum + "_" + str(file_size))
+        print_str(filemd5sum + "_" + str(file_size))
     s.send(('FILE ' + filemd5sum + ' ' + str(file_size) + ' ' +
             urllib.parse.quote(remote_name) + '\n').encode())
     data = s.recv(100).decode()
@@ -258,7 +267,7 @@ if args.exclude_file_name == None:
     exclude_file_name_patterns = []
 else:
     for exname in args.exclude_file_name:
-        print("exclude: " + exname)
+        print_str("exclude: " + exname)
         exclude_file_name_patterns.append(re.compile(exname))
 
 if args.remote_name == None:
@@ -312,21 +321,21 @@ if data[0:2] != 'OK':
     sys.exit(-1)
 
 if os.path.islink(file_name):
-    print(file_name + " is symlink", end='')
+    print_str(file_name + " is symlink", end='')
     linkto = os.readlink(file_name)
     send_link(file_new_name, linkto)
     end_hbackup()
 
 if os.path.isfile(file_name):
-    print(file_name + " is file", end='')
+    print_str(file_name + " is file", end='')
     send_file(file_name, file_new_name)
     end_hbackup()
 
 if not os.path.isdir(file_name):
-    print(file_name + " is not symlink, file, dir, I do not know how to deal")
+    print_str(file_name + " is not symlink, file, dir, I do not know how to deal")
     end_hbackup()
 
-print(file_name + " is dir")
+print_str(file_name + " is dir")
 
 for root, dirs, files in os.walk(file_name, topdown=True):
     for name in files:
@@ -335,7 +344,7 @@ for root, dirs, files in os.walk(file_name, topdown=True):
             skip = False
             for expatterns in exclude_file_name_patterns:
                 if expatterns.match(local_file_name) != None:
-                    print(local_file_name + " SKIP excluded")
+                    print_str(local_file_name + " SKIP excluded")
                     skip = True
                     break
             if skip:
@@ -343,7 +352,7 @@ for root, dirs, files in os.walk(file_name, topdown=True):
                 continue
         if file_mtime_start != None:
             if os.lstat(local_file_name).st_mtime < file_mtime_start:
-                print(local_file_name + " SKIP old file")
+                print_str(local_file_name + " SKIP old file")
                 skipped_files += 1
                 continue
         remote_file_name = file_new_name + '/' + root[len(file_name) +
@@ -351,20 +360,20 @@ for root, dirs, files in os.walk(file_name, topdown=True):
         if os.sep == "\\":
             remote_file_name = remote_file_name.replace("\\", "/")
         if debug:
-            print("F root=" + root + " name=" + name + " file_new_name=" +
+            print_str("F root=" + root + " name=" + name + " file_new_name=" +
                   file_new_name)
-            print(local_file_name + " --> " + remote_file_name)
+            print_str(local_file_name + " --> " + remote_file_name)
         if os.path.islink(local_file_name):
-            print(local_file_name + " is symlink", end='')
+            print_str(local_file_name + " is symlink", end='')
             linkto = os.readlink(local_file_name)
             send_link(remote_file_name, linkto)
         elif os.path.isfile(local_file_name):
-            print(local_file_name, end='')
+            print_str(local_file_name, end='')
             if debug:
                 print(" is file")
             send_file(local_file_name, remote_file_name)
         else:
-            print(local_file_name, " SKIP")
+            print_str(local_file_name, " SKIP")
 
     for name in dirs:
         local_file_name = os.path.join(root, name)
@@ -372,7 +381,7 @@ for root, dirs, files in os.walk(file_name, topdown=True):
             skip = False
             for expatterns in exclude_file_name_patterns:
                 if expatterns.match(local_file_name) != None:
-                    print(local_file_name + " SKIP excluded")
+                    print_str(local_file_name + " SKIP excluded")
                     skip = True
                     break
             if skip:
@@ -380,17 +389,17 @@ for root, dirs, files in os.walk(file_name, topdown=True):
                 continue
         if file_mtime_start != None:
             if os.lstat(local_file_name).st_mtime < file_mtime_start:
-                print(local_file_name + " SKIP old file")
+                print_str(local_file_name + " SKIP old file")
                 skipped_files += 1
                 continue
         remote_file_name = file_new_name + '/' + root[len(file_name) +
                                                       1:] + '/' + name
         if os.path.islink(local_file_name):
-            print(local_file_name + " is symlink", end='')
+            print_str(local_file_name + " is symlink", end='')
             linkto = os.readlink(local_file_name)
             send_link(remote_file_name, linkto)
             continue
-        print(os.path.join(root, name) + " is dir", end='')
+        print_str(os.path.join(root, name) + " is dir", end='')
         if os.sep == "\\":
             remote_file_name = remote_file_name.replace("\\", "/")
         send_dir(remote_file_name)
