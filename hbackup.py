@@ -28,9 +28,9 @@ def bad_filename(filename):
 
 def print_str(str, end='\n',):
     try:
-        print(name, end=end)
+        print(str, end=end)
     except UnicodeEncodeError:
-        print(bad_filename(name), end=end)
+        print(bad_filename(str), end=end)
 
 def load_md5sum_cache(md5sum_cache_file):
     global md5sum_cache
