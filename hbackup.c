@@ -30,27 +30,130 @@
 #include <pthread.h>
 #include <openssl/md5.h>
 
+#include "uthash.h"
+
 #include "util.c"
 
 int days = 0;
 char md5cache_file[MAXLEN];
-char error_log_file[MAXLEN];
-size_t total_file_len, upload_file_len;
-size_t total_files, total_dirs, total_links;
+FILE *md5cache_fp;
 
+char error_log_file[MAXLEN];
+
+char local_file_name[MAXLEN];
+char remote_file_name[MAXLEN];
+
+int haserror = 0;
+size_t total_files, total_dirs, total_links, skipped_files, total_file_len, upload_file_len;
+
+struct my_struct {
+	const char *filename;	/* key */
+	time_t filetime;
+	int used;
+	char md5s[MD5_DIGEST_LENGTH * 2 + 1];
+	UT_hash_handle hh;	/* makes this structure hashable */
+};
+
+struct my_struct *md5sum_cache = NULL;
+
+void md5sum_cache_update(char *name, time_t ft, char *md5s)
+{
+	struct my_struct *s = NULL;
+	char *p;
+	HASH_FIND_STR(md5sum_cache, name, s);
+	if (s) {
+		if (debug)
+			fprintf(stderr, "update md5sum_cache %lu %s %s\n", ft, md5s, name);
+		s->filetime = ft;
+		s->used = 1;
+		strncpy(s->md5s, md5s, MD5_DIGEST_LENGTH * 2);
+		return;
+	}
+	s = (struct my_struct *)malloc(sizeof(struct my_struct));
+	p = malloc(strlen(name) + 1);
+	if (p == NULL) {
+		fprintf(stderr, "malloc error\n");
+		exit(0);
+	}
+	strcpy(p, name);
+	s->filename = p;
+	s->filetime = ft;
+	s->used = 1;
+	strncpy(s->md5s, md5s, MD5_DIGEST_LENGTH * 2);
+	HASH_ADD_KEYPTR(hh, md5sum_cache, s->filename, strlen(s->filename), s);
+	if (debug)
+		fprintf(stderr, "add md5sum_cache %lu %s %s\n", ft, md5s, name);
+}
+
+void load_md5sum_cache()
+{
+	char buf[MAXLEN];
+	int cnt = 0;
+	printf("loading md5sum_cache from %s ...", md5cache_file);
+	while (fgets(buf, MAXLEN, md5cache_fp)) {
+		char *p1, *p2, *p3;
+		p1 = buf;
+		p2 = buf;
+		while (*p2 && (*p2 != ' '))
+			p2++;
+		if (*p2 == 0) {
+			fprintf(stderr, "skip %s", buf);
+			continue;
+		}
+		p3 = p2 + 1;
+		while (*p3 && (*p3 != ' '))
+			p3++;
+		if (*p3 == 0) {
+			fprintf(stderr, "skip %s", buf);
+			continue;
+		}
+		*p2 = 0;
+		p2++;
+		*p3 = 0;
+		p3++;
+		if (*p3 == 0)
+			continue;
+		if (p3[strlen(p3) - 1] == '\n')
+			p3[strlen(p3) - 1] = 0;
+		time_t ft;
+		if (sscanf(p1, "%lu", &ft) != 1)
+			continue;
+		if (strlen(p2) != MD5_DIGEST_LENGTH * 2)
+			continue;
+		if (strlen(p3) <= 0)
+			continue;
+		if (debug)
+			fprintf(stderr, "cache %lu %s %s\n", ft, p2, p3);
+		md5sum_cache_update(p3, ft, p2);
+		cnt += 1;
+	}
+	printf("loaded md5sum_cache %d lines\n", cnt);
+}
+
+void save_md5sum_cache()
+{
+	rewind(md5cache_fp);
+	ftruncate(fileno(md5cache_fp), 0);
+	struct my_struct *s;
+
+	for (s = md5sum_cache; s != NULL; s = s->hh.next) {
+		if (s->used)
+			fprintf(md5cache_fp, "%lu %s %s\n", s->filetime, s->md5s, s->filename);
+	}
+	fclose(md5cache_fp);
+}
 
 int tcp_connect(const char *host, const char *serv)
 {
 	int sockfd, n;
-	struct addrinfo	hints, *res, *ressave;
+	struct addrinfo hints, *res, *ressave;
 
 	bzero(&hints, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
-	if ( (n = getaddrinfo(host, serv, &hints, &res)) != 0)
-		err_quit("tcp_connect error for %s, %s",
-				 host, serv);
+	if ((n = getaddrinfo(host, serv, &hints, &res)) != 0)
+		err_quit("tcp_connect error for %s, %s", host, serv);
 	ressave = res;
 
 	do {
@@ -59,19 +162,43 @@ int tcp_connect(const char *host, const char *serv)
 			continue;	/* ignore this one */
 
 		if (connect(sockfd, res->ai_addr, res->ai_addrlen) == 0)
-			break;		/* success */
+			break;	/* success */
 
 		close(sockfd);	/* ignore this one */
-	} while ( (res = res->ai_next) != NULL);
+	} while ((res = res->ai_next) != NULL);
 
 	if (res == NULL)	/* errno set from final connect() */
 		err_sys("tcp_connect error for %s, %s", host, serv);
 
 	freeaddrinfo(ressave);
 
-	return(sockfd);
+	return (sockfd);
 }
+
 /* end tcp_connect */
+
+int SendPass(int fd, char *pass)
+{
+	char buf[MAXLEN];
+	int n;
+	snprintf(buf, MAXLEN, "PASS %s\n", pass);
+	if (debug)
+		fprintf(stderr, "C: %s", buf);
+	Writen(fd, buf, strlen(buf));
+	n = Readline(fd, buf, MAXLEN);
+	buf[n] = 0;
+	if (n == 0) {
+		if (debug)
+			fprintf(stderr, "read 0, exit\n");
+		exit(0);
+	}
+	if (debug)
+		fprintf(stderr, "S: %s", buf);
+	if (memcmp(buf, "OK", 2) == 0)
+		return 0;
+	fprintf(stderr, "Got %s, exit\n", buf);
+	exit(0);
+}
 
 // return 1 OK
 // return 0 error
@@ -447,13 +574,15 @@ void usage(void)
 {
 	printf("Usage:\n");
 	printf("./hbackup [ -d ] [ -x exclude_file_regex ] [ -t n ] [ -e err_log_file ] \n"
-	      "           [ -m md5cache.txt ] HostName Port Password File/DirToSend RemoteName\n");
+	       "           [ -m md5cache.txt ] HostName Port Password File/DirToSend RemoteName\n");
 	printf(" options:\n");
 	printf("    -d              enable debug\n");
 	printf("    -x regex        exlude file regex\n");
 	printf("    -t n            skip n days old files\n");
-	printf("    -e err_log_file error msg will be append to err_log_file, and continue to run\n");
-	printf("    -m md5cache.txt md5sum_cache will be used if the file\'s mtime does not change.\n");
+	printf
+	    ("    -e err_log_file error msg will be append to err_log_file, and continue to run\n");
+	printf
+	    ("    -m md5cache.txt md5sum_cache will be used if the file\'s mtime does not change.\n");
 	printf("                    md5sum_cache_file must be created before use\n");
 	printf("\n");
 	exit(0);
@@ -462,7 +591,7 @@ void usage(void)
 int main(int argc, char *argv[])
 {
 	int c;
-	int listenfd;
+	int fd;
 
 	while ((c = getopt(argc, argv, "dx:t:e:m:")) != EOF)
 		switch (c) {
@@ -484,49 +613,36 @@ int main(int argc, char *argv[])
 		}
 	printf("argc = %d, optindex = %d\n", argc, optind);
 
-	if( argc - optind != 5) 
+	if (argc - optind != 5)
 		usage();
 
+	strncpy(local_file_name, argv[optind + 3], MAXLEN);
+	strncpy(remote_file_name, argv[optind + 4], MAXLEN);
 	if (debug) {
-		printf("         debug = 1\n");
-		printf("  exclude_regx = \n");
-		printf("          days = %d\n", days);
-		printf("error_log_file = %s\n", error_log_file);
-		printf("md5cache_file =  %s\n", md5cache_file);
+		printf("           debug = 1\n");
+		printf("    exclude_regx = \n");
+		printf("            days = %d\n", days);
+		printf("  error_log_file = %s\n", error_log_file);
+		printf("   md5cache_file = %s\n", md5cache_file);
+		printf("============================\n");
+		printf("            host = %s\n", argv[optind]);
+		printf("            port = %s\n", argv[optind + 1]);
+		printf("            pass = %s\n", argv[optind + 2]);
+		printf(" local_file_name = %s\n", local_file_name);
+		printf("remote_file_name = %s\n", remote_file_name);
 		printf("\n");
 	}
 
-exit(0);
-	signal(SIGCHLD, SIG_IGN);
-	if (debug == 0) {
-		daemon_init("translog_server", LOG_DAEMON);
-		umask(022);
-		while (1) {
-			int pid;
-			pid = fork();
-			if (pid == 0)	// child do the job
-				break;
-			else if (pid == -1)	// error
-				exit(0);
-			else
-				wait(NULL);	// parent wait for child
-			sleep(2);	// wait 2 second, and rerun
+	if (md5cache_file[0]) {
+		md5cache_fp = fopen(md5cache_file, "r+");
+		if (md5cache_fp == NULL) {
+			fprintf(stderr, "open file %s error, exit\n", md5cache_file);
+			exit(0);
 		}
+		load_md5sum_cache();
 	}
-
-	while (1) {
-		int infd;
-		int pid;
-		if (debug)
-			fprintf(stderr, "%s", "waiting client..\n");
-		infd = accept(listenfd, NULL, 0);
-		if (infd < 0)
-			continue;
-		pid = fork();
-		if (pid == 0)
-			Process(infd);
-		close(infd);
-	}
-
+	fd = tcp_connect(argv[optind], argv[optind + 1]);
+	SendPass(fd, argv[optind + 2]);
+	exit(0);
 	return 0;
 }
