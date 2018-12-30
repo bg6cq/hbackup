@@ -30,6 +30,8 @@
 #include <pthread.h>
 #include <openssl/md5.h>
 #include <linux/limits.h>
+#include <libgen.h>
+#include <dirent.h>
 
 #include "uthash.h"
 
@@ -46,7 +48,7 @@ char local_file_name[PATH_MAX];
 char remote_file_name[PATH_MAX];
 
 int haserror = 0;
-size_t total_files, total_dirs, total_links, skipped_files, total_file_len, upload_file_len;
+unsigned int total_files, total_dirs, total_links, skipped_files, total_file_len, upload_file_len;
 
 struct my_struct {
 	const char *filename;	/* key */
@@ -303,6 +305,8 @@ void send_link(int fd, char *remote_name, char *linkto)
 		printf("error when url_encode %s\n", remote_name);
 		exit(0);
 	}
+	buf[7 + n1] = ' ';
+	n1++;
 	n2 = url_encode(linkto, strlen(linkto), buf + n1 + 7, MAXLEN - 8 - n1);
 	if (n2 == 0) {
 		printf("error when url_encode %s\n", linkto);
@@ -310,7 +314,7 @@ void send_link(int fd, char *remote_name, char *linkto)
 	}
 
 	buf[7 + n1 + n2] = '\n';
-	buf[7 + n1 + n2 + 1] = '\n';
+	buf[7 + n1 + n2 + 1] = 0;
 	if (debug)
 		fprintf(stderr, "C: %s", buf);
 	Writen(fd, buf, 7 + n1 + n2 + 1);
@@ -424,374 +428,84 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	exit(0);
 }
 
-// return 1 OK
-// return 0 error
-int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len)
+void send_whole_dir(int fd, char *dir, char *remote_dir)
 {
-	char buf[MAXLEN];
-	char file_name[MAXLEN];
-	size_t file_got = 0;
-	int n;
-
-	strcpy(buf, "DATA I need your data\n");
-	Writen(fd, buf, strlen(buf));
-	snprintf(file_name, MAXLEN, "/hashed_file/tmp.%d", getpid());
-	check_and_create_dir(file_name);
-	FILE *fp = fopen(file_name, "w");
-	if (fp == NULL) {
-		const char format[] = "ERROR open tmpfile %.*s for write\n";
-		snprintf(buf, MAXLEN, format, (int)(MAXLEN - sizeof(format)), file_name);
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-		exit(-1);
+	DIR *dirp;
+	struct dirent *direntp;
+	dirp = opendir(dir);
+	if (dirp == NULL) {
+		printf("opendir error %s\n", dir);
+		exit(0);
 	}
-	if (debug)
-		fprintf(stderr, "tmpfile %s open for write\n", file_name);
-	while (1) {
-		char buf[MAXLINE];
-		size_t remains = file_len - file_got;
-		if (remains == 0)
-			break;
-		if (remains >= MAXLINE)
-			n = Readn(fd, buf, MAXLINE);
-		else
-			n = Readn(fd, buf, remains);
-		file_got += n;
-		upload_file_len += n;
-		if (n == 0) {	// end of file
-			fclose(fp);
-			unlink(file_name);
-			snprintf(buf, 100, "ERROR file length %zu, only read %zu\n", file_len,
-				 file_got);
-			Writen(fd, buf, strlen(buf));
-			if (debug)
-				fprintf(stderr, "%s", buf);
-			exit(-1);
+	while ((direntp = readdir(dirp)) != NULL) {
+		struct stat st;
+		char lfile_name[PATH_MAX];
+		if (strcmp(direntp->d_name, ".") == 0)
+			continue;
+		if (strcmp(direntp->d_name, "..") == 0)
+			continue;
+		snprintf(lfile_name, PATH_MAX, "%s/%s", dir, direntp->d_name);
+		if (lstat(lfile_name, &st) != 0) {
+			printf("lstat error: %s\n", lfile_name);
+			exit(0);
 		}
-		if (fwrite(buf, 1, n, fp) != n) {
-			fclose(fp);
-			unlink(file_name);
-			strcpy(buf, "ERROR file write\n");
-			Writen(fd, buf, strlen(buf));
+		if (S_ISDIR(st.st_mode)) {
+			char buf[PATH_MAX];
 			if (debug)
-				fprintf(stderr, "%s", buf);
-			exit(-1);
+				fprintf(stderr, "DIR %s\n", lfile_name);
+			snprintf(buf, PATH_MAX, "%s/%s", remote_dir, direntp->d_name);
+			send_dir(fd, buf);
+			send_whole_dir(fd, lfile_name, buf);
 		}
-		if (debug)
-			fprintf(stderr, "write %zu of %zu\n", file_got, file_len);
+		if (S_ISLNK(st.st_mode)) {
+			char buf[PATH_MAX], lpath[PATH_MAX];
+			int n;
+			if (debug)
+				fprintf(stderr, "LINK %s\n", lfile_name);
+			n = readlink(lfile_name, lpath, PATH_MAX - 1);
+			if (n == -1) {
+				printf("readlink error %s\n", lfile_name);
+				exit(0);
+			}
+			lpath[n] = 0;
+			snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, direntp->d_name);
+			send_link(fd, buf, lpath);
+		}
+		if (S_ISREG(st.st_mode)) {
+			char buf[PATH_MAX];
+			if (debug)
+				fprintf(stderr, "FILE %s\n", lfile_name);
+			snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, lfile_name);
+			send_file(fd, lfile_name, buf);
+		}
 	}
-	fclose(fp);
-	if (memcmp(md5sum, get_file_md5sum(file_name), 32) != 0) {
-		unlink(file_name);
-		strcpy(buf, "ERROR upload file md5sum error\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-		return 0;
-	}
-	check_and_create_dir(hashed_file_name);
-	n = rename(file_name, hashed_file_name);
-	if (n == 0)
-		return 1;
-
-	unlink(file_name);
-	snprintf(buf, 100, "ERROR rename uploaded file error %d, exit\n", errno);
-	Writen(fd, buf, strlen(buf));
-	if (debug)
-		fprintf(stderr, "%s", buf);
-	exit(-1);
+	closedir(dirp);
 }
 
-void ProcessFile(int fd)
+void end_backup(int fd)
 {
 	char buf[MAXLEN];
-	char file_name[MAXLEN];
-	char hashed_file[MAXLEN];
-	char md5sum[MAXLEN];
-	char *p;
-	size_t file_len;
 	int n;
-
+	sprintf(buf, "END\n");
+	Writen(fd, buf, strlen(buf));
 	n = Readline(fd, buf, MAXLEN);
 	buf[n] = 0;
 	if (n == 0) {
-		if (debug)
-			fprintf(stderr, "read 0, exit\n");
+		printf("read 0, exit\n");
 		exit(0);
 	}
-
-	if (memcmp(buf, "END\n", 4) == 0) {	// END all
-		snprintf(buf, MAXLEN, "BYE FDL: %zu/%zu/%zu U/A: %zu/%zu\n", total_files,
-			 total_dirs, total_links, upload_file_len, total_file_len);
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-		exit(0);
-	}
-
-	if (buf[strlen(buf) - 1] == '\n')
-		buf[strlen(buf) - 1] = 0;
-
-	if (memcmp(buf, "MKDIR ", 6) == 0) {	// MKDIR dir_name
-		char str[MAXLEN];
-		struct stat stbuf;
-		total_dirs++;
-		p = buf + 6;
-		if (debug)
-			fprintf(stderr, "C->S %s ", buf);
-		url_decode(p);
-		snprintf(str, MAXLEN, "/data/%s", p);
-		if (stat(str, &stbuf) == 0) {
-			if (S_ISDIR(stbuf.st_mode)) {	// dir exists
-				strcpy(buf, "OK mkdir, dir in server\n");
-				Writen(fd, buf, strlen(buf));
-				if (debug)
-					fprintf(stderr, "%s", buf);
-				return;
-			}
-			strcpy(buf, "ERROR mkdir, name exists, exit\n");
-			Writen(fd, buf, strlen(buf));
-			if (debug)
-				fprintf(stderr, "%s", buf);
-			exit(-1);
-		}
-		create_dir(str);
-		strcpy(buf, "OK mkdir\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-		return;
-	}
-
-	if (memcmp(buf, "MKLINK ", 7) == 0) {	// MKLINK file_name linkto_name
-		char strnew[MAXLEN], strold[MAXLEN];
-		struct stat stbuf;
-		total_links++;
-		if (debug)
-			fprintf(stderr, "C->S %s ", buf);
-		p = buf + 7;
-		while (*p && (*p != ' '))
-			p++;
-		if (*p == 0) {	// 
-			if (debug)
-				fprintf(stderr, "%s error\n", buf);
-			exit(-1);
-		}
-		*p = 0;
-		p++;
-		url_decode(buf + 7);
-		snprintf(strnew, MAXLEN, "/data/%s", buf + 7);
-		url_decode(p);
-		snprintf(strold, MAXLEN, "%s", p);
-		if (lstat(strnew, &stbuf) == 0) {
-			if (S_ISLNK(stbuf.st_mode)) {	// link exists
-				strcpy(buf, "OK mklink, link in server\n");
-				Writen(fd, buf, strlen(buf));
-				if (debug)
-					fprintf(stderr, "%s", buf);
-				return;
-			}
-			strcpy(buf, "ERROR mklink, name exists, exit\n");
-			Writen(fd, buf, strlen(buf));
-			if (debug)
-				fprintf(stderr, "%s", buf);
-			exit(-1);
-		}
-		check_and_create_dir(strnew);
-		if (symlink(strold, strnew) == 0) {
-			strcpy(buf, "OK mklink\n");
-			Writen(fd, buf, strlen(buf));
-			if (debug)
-				fprintf(stderr, "%s", buf);
-		} else {
-			strcpy(buf, "ERROR mklink, exit\n");
-			Writen(fd, buf, strlen(buf));
-			if (debug)
-				fprintf(stderr, "%s", buf);
-			exit(-1);
-		}
-		return;
-	}
-// C -> FILE md5sum file_len file_name\n
-//
-	if (memcmp(buf, "FILE ", 5) != 0) {	// FILE md5sum file_len file_name
-		strcpy(buf, "ERROR unknow cmd, exit\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-		exit(-1);
-	}
-	total_files++;
-	if (buf[strlen(buf) - 1] == '\n')
-		buf[strlen(buf) - 1] = 0;
-	p = buf + 5;
-	while (*p && (*p != ' '))
-		p++;
-	if (*p == 0) {		// no file_len 
-		if (debug)
-			fprintf(stderr, "%s error\n", buf);
-		exit(-1);
-	}
-	*p = 0;
-	p++;
-	if (strlen(buf + 5) != 32) {	// md5sum len
-		p--;
-		*p = ' ';
-		if (debug)
-			fprintf(stderr, "%s md5sum len error\n", buf);
-		exit(-1);
-	}
-	strcpy(md5sum, buf + 5);
-	if (sscanf(p, "%zu", &file_len) != 1) {
-		p--;
-		*p = ' ';
-		if (debug)
-			fprintf(stderr, "%s file len error\n", buf);
-		exit(-1);
-	}
-	total_file_len += file_len;
-	while (*p && (*p != ' '))
-		p++;
-	if (*p == 0) {		// no file name
-		if (debug)
-			fprintf(stderr, "no file name\n");
-		exit(-1);
-	}
-	p++;
-	if (*p == 0) {		// no file name
-		if (debug)
-			fprintf(stderr, "no file name\n");
-		exit(-1);
-	}
-	while (*p && *p == '/')
-		p++;
-	if (*p == 0) {		// no file name
-		if (debug)
-			fprintf(stderr, "no file name\n");
-		exit(-1);
-	}
-	url_decode(p);
-	snprintf(file_name, MAXLEN, "/data/%s", p);
 	if (debug)
-		fprintf(stderr, "C->S FILE %s %zu %s ", md5sum, file_len, file_name);
+		fprintf(stderr, "S: %s", buf);
 
-	struct stat stbuf;
-	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
-	if (lstat(file_name, &stbuf) == 0) {	// file exists, check if the same, I use lstat, not stat, right?
-		struct stat stbuf_hashed;
-		if (lstat(hashed_file, &stbuf_hashed) == 0) {	// get hashed file stat
-			if (stbuf.st_ino == stbuf_hashed.st_ino)	// the same file
-				strcpy(buf, "OK same file in server\n");
-			else
-				strcpy(buf, "ERROR file exists, but not the same md5sum\n");
-		} else
-			strcpy(buf, "ERROR file exists, hashed file not exists\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-		return;
+	printf("FDL: %ul/%ul/%ul, skipped %ul, U/A: %ul/%ul\n",
+	       total_files, total_dirs, total_links, skipped_files,
+	       upload_file_len, total_file_len);
+	if (md5cache_fp)
+		save_md5sum_cache();
+	if (haserror) {
+		printf("Encountered error when backuping file\n");
+		printf("Error msg append to %s, please check it\n", error_log_file);
 	}
-	if (access(hashed_file, F_OK) != 0)	// hashed file not exists, recv it
-		if (RecvHashedFile(fd, md5sum, hashed_file, file_len) == 0)
-			return;
-
-	check_and_create_dir(file_name);
-
-	n = link(hashed_file, file_name);
-	if (n == 0) {		// OK
-		strcpy(buf, "OK file in server\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-		return;
-	}
-
-	snprintf(buf, 100, "ERROR link file error %d, exit\n", errno);
-	Writen(fd, buf, strlen(buf));
-	if (debug)
-		fprintf(stderr, "%s", buf);
-	exit(-1);
-}
-
-void Process(int fd)
-{
-	char buf[MAXLEN];
-	char *p;
-	int n;
-	int pass_ok;
-
-//      password check
-// C -> PASS pasword
-// S    open config_file.txt read password and work_dir, chroot(work_dir), setuid(work_uid)
-//      
-	while (1) {		// PASS password check
-		FILE *fp;
-		char file_buf[MAXLEN];
-		pass_ok = 0;
-		n = Readline(fd, buf, MAXLEN);
-		buf[n] = 0;
-		if (n == 0)
-			exit(0);
-		if (memcmp(buf, "PASS ", 5) != 0)
-			continue;
-		if (buf[strlen(buf) - 1] == '\n')
-			buf[strlen(buf) - 1] = 0;
-		if (strlen(buf + 5) == 0)
-			continue;
-		if (fp == NULL) {
-			strcpy(buf, "ERROR open config file\n");
-			Writen(fd, buf, strlen(buf));
-			if (debug)
-				fprintf(stderr, "%s", buf);
-			exit(-1);
-		}
-		while (fgets(file_buf, MAXLEN, fp)) {
-			if (file_buf[0] == '#')
-				continue;
-			if (file_buf[strlen(file_buf) - 1] == '\n')
-				file_buf[strlen(file_buf) - 1] = 0;
-			p = file_buf;
-			while (*p && (*p != ' '))
-				p++;
-			if (*p == 0)
-				continue;
-			*p = 0;
-			p++;
-			if (strcmp(buf + 5, file_buf) == 0) {
-				pass_ok = 1;
-				while (*p && (*p == ' '))
-					p++;
-
-				if (debug)
-					fprintf(stderr, "password ok, work_dir is %s\n", p);
-				if (chroot(p) != 0) {
-					perror("chroot");
-					snprintf(buf, MAXLEN, "ERROR chroot to %s\n", p);
-					Writen(fd, buf, strlen(buf));
-					if (debug)
-						fprintf(stderr, "%s", buf);
-					exit(-1);
-				}
-				chdir("/");
-				break;
-			}
-		}
-		fclose(fp);
-		if (pass_ok)
-			break;
-		strcpy(buf, "ERROR password\n");
-		Writen(fd, buf, strlen(buf));
-		if (debug)
-			fprintf(stderr, "%s", buf);
-	}
-	strcpy(buf, "OK password ok\n");
-	Writen(fd, buf, strlen(buf));
-	if (debug)
-		fprintf(stderr, "%s", buf);
-
-	while (1)
-		ProcessFile(fd);
 }
 
 void usage(void)
@@ -842,6 +556,12 @@ int main(int argc, char *argv[])
 
 	strncpy(local_file_name, argv[optind + 3], PATH_MAX);
 	strncpy(remote_file_name, argv[optind + 4], PATH_MAX);
+
+	while (strlen(local_file_name) > 0 && local_file_name[strlen(local_file_name) - 1] == '/')
+		local_file_name[strlen(local_file_name) - 1] = 0;
+	while (strlen(remote_file_name) > 0
+	       && remote_file_name[strlen(remote_file_name) - 1] == '/')
+		remote_file_name[strlen(remote_file_name) - 1] = 0;
 	if (debug) {
 		printf("           debug = 1\n");
 		printf("    exclude_regx = \n");
@@ -874,6 +594,41 @@ int main(int argc, char *argv[])
 	}
 	fd = tcp_connect(argv[optind], argv[optind + 1]);
 	SendPass(fd, argv[optind + 2]);
+
+	struct stat st;
+	if (lstat(local_file_name, &st) != 0) {
+		printf("lstat error: %s\n", local_file_name);
+		exit(0);
+	}
+	if (S_ISDIR(st.st_mode)) {
+		if (debug)
+			fprintf(stderr, "DIR %s\n", local_file_name);
+		send_whole_dir(fd, local_file_name, remote_file_name);
+		end_backup(fd);
+		exit(0);
+	}
+	if (S_ISLNK(st.st_mode)) {
+		char buf[PATH_MAX], lpath[PATH_MAX];
+		int n;
+		if (debug)
+			fprintf(stderr, "LINK %s\n", local_file_name);
+		n = readlink(local_file_name, lpath, PATH_MAX - 1);
+		if (n == -1) {
+			printf("readlink error %s\n", local_file_name);
+			exit(0);
+		}
+		lpath[n] = 0;
+		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
+		send_link(fd, buf, lpath);
+		exit(0);
+	}
+	if (S_ISREG(st.st_mode)) {
+		char buf[PATH_MAX];
+		if (debug)
+			fprintf(stderr, "FILE %s\n", local_file_name);
+		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
+		send_file(fd, local_file_name, buf);
+		exit(0);
+	}
 	exit(0);
-	return 0;
 }
