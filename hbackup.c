@@ -190,18 +190,18 @@ char *file_md5sum(char *fname)
 
 void log_err(const char *fmt, ...)
 {
+	va_list ap;
+	va_start(ap, fmt);
 	haserror = 1;
 	if (error_log_fp) {
-		va_list ap;
+		fprintf(stderr, "1\n");
 		fprintf(error_log_fp, "%s ", stamp());
-		va_start(ap, fmt);
-		fprintf(error_log_fp, fmt, ap);
+		fprintf(stderr, "2\n");
+		vfprintf(error_log_fp, fmt, ap);
 		va_end(ap);
 		fflush(error_log_fp);
 	} else {
-		va_list ap;
-		va_start(ap, fmt);
-		printf(fmt, ap);
+		vprintf(fmt, ap);
 		va_end(ap);
 		exit(0);
 	}
@@ -453,11 +453,11 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 			char buf[PATH_MAX];
 			if (debug)
 				fprintf(stderr, "DIR %s\n", lfile_name);
+			printf("%s\n", lfile_name);
 			snprintf(buf, PATH_MAX, "%s/%s", remote_dir, direntp->d_name);
 			send_dir(fd, buf);
 			send_whole_dir(fd, lfile_name, buf);
-		}
-		if (S_ISLNK(st.st_mode)) {
+		} else if (S_ISLNK(st.st_mode)) {
 			char buf[PATH_MAX], lpath[PATH_MAX];
 			int n;
 			if (debug)
@@ -468,16 +468,18 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 				exit(0);
 			}
 			lpath[n] = 0;
+			printf("%s LINK\n", lfile_name);
 			snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, direntp->d_name);
 			send_link(fd, buf, lpath);
-		}
-		if (S_ISREG(st.st_mode)) {
+		} else if (S_ISREG(st.st_mode)) {
 			char buf[PATH_MAX];
 			if (debug)
 				fprintf(stderr, "FILE %s\n", lfile_name);
+			printf("%s\n", lfile_name);
 			snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, lfile_name);
 			send_file(fd, lfile_name, buf);
-		}
+		} else
+			printf("%s SKIP\n", lfile_name);
 	}
 	closedir(dirp);
 }
@@ -497,7 +499,7 @@ void end_backup(int fd)
 	if (debug)
 		fprintf(stderr, "S: %s", buf);
 
-	printf("FDL: %ul/%ul/%ul, skipped %ul, U/A: %ul/%ul\n",
+	printf("Files/Dirs/Links: %u/%u/%u, skipped %u, UploadBytes/TotalBytes: %u/%u\n",
 	       total_files, total_dirs, total_links, skipped_files,
 	       upload_file_len, total_file_len);
 	if (md5cache_fp)
@@ -603,11 +605,11 @@ int main(int argc, char *argv[])
 	if (S_ISDIR(st.st_mode)) {
 		if (debug)
 			fprintf(stderr, "DIR %s\n", local_file_name);
+		printf("%s\n", local_file_name);
 		send_whole_dir(fd, local_file_name, remote_file_name);
 		end_backup(fd);
 		exit(0);
-	}
-	if (S_ISLNK(st.st_mode)) {
+	} else if (S_ISLNK(st.st_mode)) {
 		char buf[PATH_MAX], lpath[PATH_MAX];
 		int n;
 		if (debug)
@@ -618,17 +620,20 @@ int main(int argc, char *argv[])
 			exit(0);
 		}
 		lpath[n] = 0;
+		printf("%s LINK\n", local_file_name);
 		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
 		send_link(fd, buf, lpath);
 		exit(0);
-	}
-	if (S_ISREG(st.st_mode)) {
+	} else if (S_ISREG(st.st_mode)) {
 		char buf[PATH_MAX];
 		if (debug)
 			fprintf(stderr, "FILE %s\n", local_file_name);
+		printf("%s\n", local_file_name);
 		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
 		send_file(fd, local_file_name, buf);
 		exit(0);
+	} else {
+		printf("%s SKIP\n", local_file_name);
 	}
 	exit(0);
 }
