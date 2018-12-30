@@ -55,11 +55,14 @@ struct my_struct {
 };
 
 struct my_struct *md5sum_cache = NULL;
+int md5sum_cache_lookup, md5sum_cache_hit, md5sum_cache_update;
 
-void md5sum_cache_update(char *name, time_t ft, char *md5s)
+void update_md5sum_cache(char *name, time_t ft, char *md5s)
 {
 	struct my_struct *s = NULL;
 	char *p;
+	if (md5cache_fp == NULL)
+		return;
 	HASH_FIND_STR(md5sum_cache, name, s);
 	if (s) {
 		if (debug)
@@ -89,6 +92,9 @@ void load_md5sum_cache()
 {
 	char buf[MAXLEN];
 	int cnt = 0;
+
+	if (md5cache_fp == NULL)
+		return;
 	printf("loading md5sum_cache from %s ...", md5cache_file);
 	while (fgets(buf, MAXLEN, md5cache_fp)) {
 		char *p1, *p2, *p3;
@@ -124,7 +130,7 @@ void load_md5sum_cache()
 			continue;
 		if (debug)
 			fprintf(stderr, "cache %lu %s %s\n", ft, p2, p3);
-		md5sum_cache_update(p3, ft, p2);
+		update_md5sum_cache(p3, ft, p2);
 		cnt += 1;
 	}
 	printf("loaded md5sum_cache %d lines\n", cnt);
@@ -132,6 +138,8 @@ void load_md5sum_cache()
 
 void save_md5sum_cache()
 {
+	if (md5cache_fp == NULL)
+		return;
 	rewind(md5cache_fp);
 	ftruncate(fileno(md5cache_fp), 0);
 	struct my_struct *s;
@@ -141,6 +149,39 @@ void save_md5sum_cache()
 			fprintf(md5cache_fp, "%lu %s %s\n", s->filetime, s->md5s, s->filename);
 	}
 	fclose(md5cache_fp);
+}
+
+time_t file_mtime(char *fname)
+{
+	struct stat buf;
+	if (stat(fname, &buf) == 0)
+		return buf.st_mtime;
+	return 0;
+}
+
+char *file_md5sum(char *fname)
+{
+	time_t ft;
+	if (md5cache_fp) {
+		struct my_struct *s;
+		ft = file_mtime(fname);
+		HASH_FIND_STR(md5sum_cache, fname, s);
+		if (s) {
+			md5sum_cache_lookup++;
+			if (s->filetime == ft) {
+				s->used = 1;
+				md5sum_cache_hit++;
+				return s->md5s;
+			}
+		}
+	}
+	char *md5s;
+	md5s = get_file_md5sum(fname);
+	if (md5cache_fp) {
+		md5sum_cache_update++;
+		update_md5sum_cache(fname, ft, md5s);
+	}
+	return md5s;
 }
 
 int tcp_connect(const char *host, const char *serv)
