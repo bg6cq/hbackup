@@ -29,19 +29,21 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <openssl/md5.h>
+#include <linux/limits.h>
 
 #include "uthash.h"
 
 #include "util.c"
 
 int days = 0;
-char md5cache_file[MAXLEN];
+char md5cache_file[PATH_MAX];
 FILE *md5cache_fp;
 
-char error_log_file[MAXLEN];
+char error_log_file[PATH_MAX];
+FILE *error_log_fp;
 
-char local_file_name[MAXLEN];
-char remote_file_name[MAXLEN];
+char local_file_name[PATH_MAX];
+char remote_file_name[PATH_MAX];
 
 int haserror = 0;
 size_t total_files, total_dirs, total_links, skipped_files, total_file_len, upload_file_len;
@@ -184,6 +186,25 @@ char *file_md5sum(char *fname)
 	return md5s;
 }
 
+void log_err(const char *fmt, ...)
+{
+	haserror = 1;
+	if (error_log_fp) {
+		va_list ap;
+		fprintf(error_log_fp, "%s ", stamp());
+		va_start(ap, fmt);
+		fprintf(error_log_fp, fmt, ap);
+		va_end(ap);
+		fflush(error_log_fp);
+	} else {
+		va_list ap;
+		va_start(ap, fmt);
+		printf(fmt, ap);
+		va_end(ap);
+		exit(0);
+	}
+}
+
 int tcp_connect(const char *host, const char *serv)
 {
 	int sockfd, n;
@@ -229,15 +250,177 @@ int SendPass(int fd, char *pass)
 	n = Readline(fd, buf, MAXLEN);
 	buf[n] = 0;
 	if (n == 0) {
-		if (debug)
-			fprintf(stderr, "read 0, exit\n");
+		printf("read 0, exit\n");
 		exit(0);
 	}
 	if (debug)
 		fprintf(stderr, "S: %s", buf);
 	if (memcmp(buf, "OK", 2) == 0)
 		return 0;
-	fprintf(stderr, "Got %s, exit\n", buf);
+	printf("Got %s, exit\n", buf);
+	exit(0);
+}
+
+void send_dir(int fd, char *remote_name)
+{
+	char buf[MAXLEN];
+	int n;
+	total_dirs++;
+	memcpy(buf, "MKDIR ", 6);
+	n = url_encode(remote_name, strlen(remote_name), buf + 6, MAXLEN - 7);
+	if (n == 0) {
+		printf("error when url_encode %s\n", remote_name);
+		exit(0);
+	}
+	buf[6 + n] = '\n';
+	buf[6 + n + 1] = 0;
+	if (debug)
+		fprintf(stderr, "C: %s", buf);
+	Writen(fd, buf, 6 + n + 1);
+
+	n = Readline(fd, buf, MAXLEN);
+	buf[n] = 0;
+	if (n == 0) {
+		printf("read 0, exit\n");
+		exit(0);
+	}
+	if (debug)
+		fprintf(stderr, "S: %s", buf);
+	if (memcmp(buf, "OK", 2) == 0)
+		return;
+	log_err("%s %s", remote_name, buf);
+	printf("S: %s", buf);
+}
+
+void send_link(int fd, char *remote_name, char *linkto)
+{
+	char buf[MAXLEN];
+	int n, n1, n2;
+	total_links++;
+	memcpy(buf, "MKLINK ", 7);
+	n1 = url_encode(remote_name, strlen(remote_name), buf + 7, MAXLEN - 8);
+	if (n1 == 0) {
+		printf("error when url_encode %s\n", remote_name);
+		exit(0);
+	}
+	n2 = url_encode(linkto, strlen(linkto), buf + n1 + 7, MAXLEN - 8 - n1);
+	if (n2 == 0) {
+		printf("error when url_encode %s\n", linkto);
+		exit(0);
+	}
+
+	buf[7 + n1 + n2] = '\n';
+	buf[7 + n1 + n2 + 1] = '\n';
+	if (debug)
+		fprintf(stderr, "C: %s", buf);
+	Writen(fd, buf, 7 + n1 + n2 + 1);
+	n = Readline(fd, buf, MAXLEN);
+	buf[n] = 0;
+	if (n == 0) {
+		printf("read 0, exit\n");
+		exit(0);
+	}
+	if (debug)
+		fprintf(stderr, "S: %s", buf);
+	if (memcmp(buf, "OK", 2) == 0)
+		return;
+	log_err("%s %s", remote_name, buf);
+	printf("S: %s", buf);
+}
+
+void send_file(int fd, char *local_file_name, char *remote_name)
+{
+	char *filemd5sum;
+	char buf[MAXLEN];
+	int n, n1, n2;
+	size_t file_size;
+	struct stat buffer;
+	total_files++;
+	filemd5sum = file_md5sum(local_file_name);
+	if (stat(local_file_name, &buffer) != 0) {
+		log_err("could not stat file %s, skip\n", local_file_name);
+		printf("could not stat file %s, skip\n", local_file_name);
+		return;
+	}
+	file_size = buffer.st_size;
+	total_file_len += file_size;
+	n1 = snprintf(buf, MAXLEN, "FILE %s %lu ", filemd5sum, file_size);
+
+	n2 = url_encode(remote_name, strlen(remote_name), buf + n1, MAXLEN - n1 - 1);
+	if (n2 == 0) {
+		printf("error when url_encode %s\n", remote_name);
+		exit(0);
+	}
+	buf[n1 + n2] = '\n';
+	buf[n1 + n2 + 1] = 0;
+	if (debug)
+		fprintf(stderr, "C: %s", buf);
+	Writen(fd, buf, n1 + n2 + 1);
+
+	n = Readline(fd, buf, MAXLEN);
+	buf[n] = 0;
+	if (n == 0) {
+		printf("read 0, exit\n");
+		exit(0);
+	}
+	if (debug)
+		fprintf(stderr, "S: %s", buf);
+	if (memcmp(buf, "OK", 2) == 0)
+		return;
+	else if (memcmp(buf, "ERROR", 5) == 0) {
+		log_err("%s --> %s %s", local_file_name, remote_name, buf);
+		return;
+	}
+	if (memcmp(buf, "DATA", 4) != 0) {
+		printf("S: %s", buf);
+		exit(0);
+	}
+
+	if (debug)
+		fprintf(stderr, "I will send file\n");
+
+	FILE *fp;
+	fp = fopen(local_file_name, "r");
+	if (fp == NULL) {
+		printf("open file error: %s\n", local_file_name);
+		exit(0);
+	}
+	size_t bytes_send = 0;
+
+	while (1) {
+		size_t need_read = file_size - bytes_send;
+		size_t bytes_read;
+		if (need_read > 0) {
+			if (need_read > MAXLEN)
+				bytes_read = fread(buf, 1, MAXLEN, fp);
+			else
+				bytes_read = fread(buf, 1, need_read, fp);
+			if (bytes_read > 0) {
+				upload_file_len += bytes_read;
+				Writen(fd, buf, bytes_read);
+				bytes_send += bytes_read;
+			} else
+				break;
+		} else
+			break;
+	}
+	fclose(fp);
+	n = Readline(fd, buf, MAXLEN);
+	buf[n] = 0;
+	if (n == 0) {
+		printf("read 0, exit\n");
+		exit(0);
+	}
+	if (debug)
+		fprintf(stderr, "S: %s", buf);
+	if (memcmp(buf, "OK", 2) == 0)
+		return;
+	else if (memcmp(buf, "ERROR", 5) == 0) {
+		printf("S: %s", buf);
+		log_err("%s --> %s %s", local_file_name, remote_name, buf);
+		return;
+	}
+	printf("S: %s", buf);
 	exit(0);
 }
 
@@ -646,10 +829,10 @@ int main(int argc, char *argv[])
 			days = atoi(optarg);
 			break;
 		case 'e':
-			strncpy(error_log_file, optarg, MAXLEN - 1);
+			strncpy(error_log_file, optarg, PATH_MAX);
 			break;
 		case 'm':
-			strncpy(md5cache_file, optarg, MAXLEN - 1);
+			strncpy(md5cache_file, optarg, PATH_MAX);
 			break;
 		}
 	printf("argc = %d, optindex = %d\n", argc, optind);
@@ -657,8 +840,8 @@ int main(int argc, char *argv[])
 	if (argc - optind != 5)
 		usage();
 
-	strncpy(local_file_name, argv[optind + 3], MAXLEN);
-	strncpy(remote_file_name, argv[optind + 4], MAXLEN);
+	strncpy(local_file_name, argv[optind + 3], PATH_MAX);
+	strncpy(remote_file_name, argv[optind + 4], PATH_MAX);
 	if (debug) {
 		printf("           debug = 1\n");
 		printf("    exclude_regx = \n");
@@ -681,6 +864,13 @@ int main(int argc, char *argv[])
 			exit(0);
 		}
 		load_md5sum_cache();
+	}
+	if (error_log_file[0]) {
+		error_log_fp = fopen(error_log_file, "a");
+		if (error_log_fp == NULL) {
+			fprintf(stderr, "open error log file %s error, exit\n", error_log_file);
+			exit(0);
+		}
 	}
 	fd = tcp_connect(argv[optind], argv[optind + 1]);
 	SendPass(fd, argv[optind + 2]);
