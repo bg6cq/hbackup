@@ -507,7 +507,7 @@ void end_backup(int fd)
 }
 
 void usage(void)
-{
+{	printf("Version: %s\n", VERSION);
 	printf("Usage:\n");
 	printf("./hbackup [ -d ] [ -e err_log_file ] \n"
 	       "           [ -m md5cache.txt ] HostName Port Password File/DirToSend RemoteName\n");

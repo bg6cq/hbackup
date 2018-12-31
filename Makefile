@@ -1,10 +1,12 @@
+GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always --tags)
+
 all: hbackup_server hbackup
 
 hbackup_server: hbackup_server.c util.c
-	gcc -o hbackup_server -g -Wall hbackup_server.c -lcrypto
+	gcc -o hbackup_server -g -Wall hbackup_server.c -lcrypto -DVERSION=\"$(GIT_VERSION)\"
 
 hbackup: hbackup.c util.c
-	gcc -o hbackup -g -Wall hbackup.c -lcrypto
+	gcc -o hbackup -g -Wall hbackup.c -lcrypto -DVERSION=\"$(GIT_VERSION)\"
 
 indent: hbackup_server.c util.c hbackup.c
 	indent  hbackup_server.c hbackup.c util.c -nbad -bap -nbc -bbo -hnl -br -brs -c33 -cd33 -ncdb -ce -ci4  \

@@ -482,7 +482,7 @@ void Process(int fd)
 }
 
 void usage(void)
-{
+{	printf("Version: %s\n", VERSION);
 	printf("Usage:\n");
 	printf("./hbackup_server -p port -f config_file [ -u user_name ] [ -6 ] [ -d ]\n");
 	printf(" options:\n");
