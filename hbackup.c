@@ -37,7 +37,6 @@
 
 #include "util.c"
 
-int days = 0;
 char md5cache_file[PATH_MAX];
 FILE *md5cache_fp;
 
@@ -48,7 +47,7 @@ char local_file_name[PATH_MAX];
 char remote_file_name[PATH_MAX];
 
 int haserror = 0;
-unsigned int total_files, total_dirs, total_links, skipped_files, total_file_len, upload_file_len;
+size_t total_files, total_dirs, total_links, skipped_files, total_file_len, upload_file_len;
 
 struct my_struct {
 	const char *filename;	/* key */
@@ -70,7 +69,7 @@ void update_md5sum_cache(char *name, time_t ft, char *md5s)
 	HASH_FIND_STR(md5sum_cache, name, s);
 	if (s) {
 		if (debug)
-			fprintf(stderr, "update md5sum_cache %lu %s %s\n", ft, md5s, name);
+			printf("update md5sum_cache %lu %s %s\n", ft, md5s, name);
 		s->filetime = ft;
 		s->used = 1;
 		strncpy(s->md5s, md5s, MD5_DIGEST_LENGTH * 2);
@@ -79,7 +78,7 @@ void update_md5sum_cache(char *name, time_t ft, char *md5s)
 	s = (struct my_struct *)malloc(sizeof(struct my_struct));
 	p = malloc(strlen(name) + 1);
 	if (p == NULL) {
-		fprintf(stderr, "malloc error\n");
+		printf("malloc error\n");
 		exit(0);
 	}
 	strcpy(p, name);
@@ -89,7 +88,7 @@ void update_md5sum_cache(char *name, time_t ft, char *md5s)
 	strncpy(s->md5s, md5s, MD5_DIGEST_LENGTH * 2);
 	HASH_ADD_KEYPTR(hh, md5sum_cache, s->filename, strlen(s->filename), s);
 	if (debug)
-		fprintf(stderr, "add md5sum_cache %lu %s %s\n", ft, md5s, name);
+		printf("add md5sum_cache %lu %s %s\n", ft, md5s, name);
 }
 
 void load_md5sum_cache()
@@ -107,14 +106,14 @@ void load_md5sum_cache()
 		while (*p2 && (*p2 != ' '))
 			p2++;
 		if (*p2 == 0) {
-			fprintf(stderr, "skip %s", buf);
+			printf("skip %s", buf);
 			continue;
 		}
 		p3 = p2 + 1;
 		while (*p3 && (*p3 != ' '))
 			p3++;
 		if (*p3 == 0) {
-			fprintf(stderr, "skip %s", buf);
+			printf("skip %s", buf);
 			continue;
 		}
 		*p2 = 0;
@@ -133,7 +132,7 @@ void load_md5sum_cache()
 		if (strlen(p3) <= 0)
 			continue;
 		if (debug)
-			fprintf(stderr, "cache %lu %s %s\n", ft, p2, p3);
+			printf("cache %lu %s %s\n", ft, p2, p3);
 		update_md5sum_cache(p3, ft, p2);
 		cnt += 1;
 	}
@@ -194,9 +193,7 @@ void log_err(const char *fmt, ...)
 	va_start(ap, fmt);
 	haserror = 1;
 	if (error_log_fp) {
-		fprintf(stderr, "1\n");
 		fprintf(error_log_fp, "%s ", stamp());
-		fprintf(stderr, "2\n");
 		vfprintf(error_log_fp, fmt, ap);
 		va_end(ap);
 		fflush(error_log_fp);
@@ -247,7 +244,7 @@ int SendPass(int fd, char *pass)
 	int n;
 	snprintf(buf, MAXLEN, "PASS %s\n", pass);
 	if (debug)
-		fprintf(stderr, "C: %s", buf);
+		printf("C: %s", buf);
 	Writen(fd, buf, strlen(buf));
 	n = Readline(fd, buf, MAXLEN);
 	buf[n] = 0;
@@ -256,7 +253,7 @@ int SendPass(int fd, char *pass)
 		exit(0);
 	}
 	if (debug)
-		fprintf(stderr, "S: %s", buf);
+		printf("S: %s", buf);
 	if (memcmp(buf, "OK", 2) == 0)
 		return 0;
 	printf("Got %s, exit\n", buf);
@@ -277,7 +274,7 @@ void send_dir(int fd, char *remote_name)
 	buf[6 + n] = '\n';
 	buf[6 + n + 1] = 0;
 	if (debug)
-		fprintf(stderr, "C: %s", buf);
+		printf("C: %s", buf);
 	Writen(fd, buf, 6 + n + 1);
 
 	n = Readline(fd, buf, MAXLEN);
@@ -287,7 +284,7 @@ void send_dir(int fd, char *remote_name)
 		exit(0);
 	}
 	if (debug)
-		fprintf(stderr, "S: %s", buf);
+		printf("S: %s", buf);
 	if (memcmp(buf, "OK", 2) == 0)
 		return;
 	log_err("%s %s", remote_name, buf);
@@ -316,7 +313,7 @@ void send_link(int fd, char *remote_name, char *linkto)
 	buf[7 + n1 + n2] = '\n';
 	buf[7 + n1 + n2 + 1] = 0;
 	if (debug)
-		fprintf(stderr, "C: %s", buf);
+		printf("C: %s", buf);
 	Writen(fd, buf, 7 + n1 + n2 + 1);
 	n = Readline(fd, buf, MAXLEN);
 	buf[n] = 0;
@@ -325,7 +322,7 @@ void send_link(int fd, char *remote_name, char *linkto)
 		exit(0);
 	}
 	if (debug)
-		fprintf(stderr, "S: %s", buf);
+		printf("S: %s", buf);
 	if (memcmp(buf, "OK", 2) == 0)
 		return;
 	log_err("%s %s", remote_name, buf);
@@ -358,7 +355,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	buf[n1 + n2] = '\n';
 	buf[n1 + n2 + 1] = 0;
 	if (debug)
-		fprintf(stderr, "C: %s", buf);
+		printf("C: %s", buf);
 	Writen(fd, buf, n1 + n2 + 1);
 
 	n = Readline(fd, buf, MAXLEN);
@@ -368,7 +365,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 		exit(0);
 	}
 	if (debug)
-		fprintf(stderr, "S: %s", buf);
+		printf("S: %s", buf);
 	if (memcmp(buf, "OK", 2) == 0)
 		return;
 	else if (memcmp(buf, "ERROR", 5) == 0) {
@@ -381,7 +378,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	}
 
 	if (debug)
-		fprintf(stderr, "I will send file\n");
+		printf("I will send file\n");
 
 	FILE *fp;
 	fp = fopen(local_file_name, "r");
@@ -416,7 +413,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 		exit(0);
 	}
 	if (debug)
-		fprintf(stderr, "S: %s", buf);
+		printf("S: %s", buf);
 	if (memcmp(buf, "OK", 2) == 0)
 		return;
 	else if (memcmp(buf, "ERROR", 5) == 0) {
@@ -452,7 +449,7 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 		if (S_ISDIR(st.st_mode)) {
 			char buf[PATH_MAX];
 			if (debug)
-				fprintf(stderr, "DIR %s\n", lfile_name);
+				printf("DIR %s\n", lfile_name);
 			printf("%s\n", lfile_name);
 			snprintf(buf, PATH_MAX, "%s/%s", remote_dir, direntp->d_name);
 			send_dir(fd, buf);
@@ -461,7 +458,7 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 			char buf[PATH_MAX], lpath[PATH_MAX];
 			int n;
 			if (debug)
-				fprintf(stderr, "LINK %s\n", lfile_name);
+				printf("LINK %s\n", lfile_name);
 			n = readlink(lfile_name, lpath, PATH_MAX - 1);
 			if (n == -1) {
 				printf("readlink error %s\n", lfile_name);
@@ -474,7 +471,7 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 		} else if (S_ISREG(st.st_mode)) {
 			char buf[PATH_MAX];
 			if (debug)
-				fprintf(stderr, "FILE %s\n", lfile_name);
+				printf("FILE %s\n", lfile_name);
 			printf("%s\n", lfile_name);
 			snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, lfile_name);
 			send_file(fd, lfile_name, buf);
@@ -496,10 +493,9 @@ void end_backup(int fd)
 		printf("read 0, exit\n");
 		exit(0);
 	}
-	if (debug)
-		fprintf(stderr, "S: %s", buf);
+	printf("End of backup, S: %s", buf);
 
-	printf("Files/Dirs/Links: %u/%u/%u, skipped %u, UploadBytes/TotalBytes: %u/%u\n",
+	printf("Files/Dirs/Links: %zu/%zu/%zu, skipped %zu, UploadBytes/TotalBytes: %zu/%zu\n",
 	       total_files, total_dirs, total_links, skipped_files,
 	       upload_file_len, total_file_len);
 	if (md5cache_fp)
@@ -513,12 +509,10 @@ void end_backup(int fd)
 void usage(void)
 {
 	printf("Usage:\n");
-	printf("./hbackup [ -d ] [ -x exclude_file_regex ] [ -t n ] [ -e err_log_file ] \n"
+	printf("./hbackup [ -d ] [ -e err_log_file ] \n"
 	       "           [ -m md5cache.txt ] HostName Port Password File/DirToSend RemoteName\n");
 	printf(" options:\n");
 	printf("    -d              enable debug\n");
-	printf("    -x regex        exlude file regex\n");
-	printf("    -t n            skip n days old files\n");
 	printf
 	    ("    -e err_log_file error msg will be append to err_log_file, and continue to run\n");
 	printf
@@ -533,16 +527,10 @@ int main(int argc, char *argv[])
 	int c;
 	int fd;
 
-	while ((c = getopt(argc, argv, "dx:t:e:m:")) != EOF)
+	while ((c = getopt(argc, argv, "de:m:")) != EOF)
 		switch (c) {
 		case 'd':
 			debug = 1;
-			break;
-		case 'x':
-			debug = 1;
-			break;
-		case 't':
-			days = atoi(optarg);
 			break;
 		case 'e':
 			strncpy(error_log_file, optarg, PATH_MAX);
@@ -551,7 +539,6 @@ int main(int argc, char *argv[])
 			strncpy(md5cache_file, optarg, PATH_MAX);
 			break;
 		}
-	printf("argc = %d, optindex = %d\n", argc, optind);
 
 	if (argc - optind != 5)
 		usage();
@@ -567,7 +554,6 @@ int main(int argc, char *argv[])
 	if (debug) {
 		printf("           debug = 1\n");
 		printf("    exclude_regx = \n");
-		printf("            days = %d\n", days);
 		printf("  error_log_file = %s\n", error_log_file);
 		printf("   md5cache_file = %s\n", md5cache_file);
 		printf("============================\n");
@@ -582,7 +568,7 @@ int main(int argc, char *argv[])
 	if (md5cache_file[0]) {
 		md5cache_fp = fopen(md5cache_file, "r+");
 		if (md5cache_fp == NULL) {
-			fprintf(stderr, "open file %s error, exit\n", md5cache_file);
+			printf("open file %s error, exit\n", md5cache_file);
 			exit(0);
 		}
 		load_md5sum_cache();
@@ -590,7 +576,7 @@ int main(int argc, char *argv[])
 	if (error_log_file[0]) {
 		error_log_fp = fopen(error_log_file, "a");
 		if (error_log_fp == NULL) {
-			fprintf(stderr, "open error log file %s error, exit\n", error_log_file);
+			printf("open error log file %s error, exit\n", error_log_file);
 			exit(0);
 		}
 	}
@@ -604,7 +590,7 @@ int main(int argc, char *argv[])
 	}
 	if (S_ISDIR(st.st_mode)) {
 		if (debug)
-			fprintf(stderr, "DIR %s\n", local_file_name);
+			printf("DIR %s\n", local_file_name);
 		printf("%s\n", local_file_name);
 		send_whole_dir(fd, local_file_name, remote_file_name);
 		end_backup(fd);
@@ -613,7 +599,7 @@ int main(int argc, char *argv[])
 		char buf[PATH_MAX], lpath[PATH_MAX];
 		int n;
 		if (debug)
-			fprintf(stderr, "LINK %s\n", local_file_name);
+			printf("LINK %s\n", local_file_name);
 		n = readlink(local_file_name, lpath, PATH_MAX - 1);
 		if (n == -1) {
 			printf("readlink error %s\n", local_file_name);
@@ -627,7 +613,7 @@ int main(int argc, char *argv[])
 	} else if (S_ISREG(st.st_mode)) {
 		char buf[PATH_MAX];
 		if (debug)
-			fprintf(stderr, "FILE %s\n", local_file_name);
+			printf("FILE %s\n", local_file_name);
 		printf("%s\n", local_file_name);
 		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
 		send_file(fd, local_file_name, buf);
