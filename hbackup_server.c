@@ -103,15 +103,15 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 	check_and_create_dir(file_name);
 	FILE *fp = fopen(file_name, "w");
 	if (fp == NULL) {
-		const char format[] = "ERROR open tmpfile %.*s for write\n";
+		const char format[] = "ERROR open tmpfile %.*s for write, exit\n";
 		snprintf(buf, MAXLEN, format, (int)(MAXLEN - sizeof(format)), file_name);
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 		exit(-1);
 	}
 	if (debug)
-		fprintf(stderr, "tmpfile %s open for write\n", file_name);
+		printf("open tmpfile %s for write\n", file_name);
 	while (1) {
 		char buf[MAXLINE];
 		size_t remains = file_len - file_got;
@@ -126,11 +126,11 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 		if (n == 0) {	// end of file
 			fclose(fp);
 			unlink(file_name);
-			snprintf(buf, 100, "ERROR file length %zu, only read %zu\n", file_len,
-				 file_got);
+			snprintf(buf, 100, "ERROR file length %zu, but only read %zu, exit\n",
+				 file_len, file_got);
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "%s", buf);
+				printf("%s", buf);
 			exit(-1);
 		}
 		if (fwrite(buf, 1, n, fp) != n) {
@@ -139,19 +139,20 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 			strcpy(buf, "ERROR file write\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "%s", buf);
+				printf("%s", buf);
 			exit(-1);
 		}
 		if (debug)
-			fprintf(stderr, "write %zu of %zu\n", file_got, file_len);
+			printf("write %zu of %zu\n", file_got, file_len);
 	}
 	fclose(fp);
 	if (memcmp(md5sum, get_file_md5sum(file_name), 32) != 0) {
 		unlink(file_name);
-		strcpy(buf, "ERROR upload file md5sum error\n");
+		strcpy(buf,
+		       "ERROR upload file md5sum error, maybe file changed during uploading\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 		return 0;
 	}
 	check_and_create_dir(hashed_file_name);
@@ -163,7 +164,7 @@ int RecvHashedFile(int fd, char *md5sum, char *hashed_file_name, size_t file_len
 	snprintf(buf, 100, "ERROR rename uploaded file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "%s", buf);
+		printf("%s", buf);
 	exit(-1);
 }
 
@@ -181,16 +182,17 @@ void ProcessFile(int fd)
 	buf[n] = 0;
 	if (n == 0) {
 		if (debug)
-			fprintf(stderr, "read 0, exit\n");
+			printf("read 0, exit\n");
 		exit(0);
 	}
 
 	if (memcmp(buf, "END\n", 4) == 0) {	// END all
-		snprintf(buf, MAXLEN, "BYE FDL: %zu/%zu/%zu U/A: %zu/%zu\n", total_files,
-			 total_dirs, total_links, upload_file_len, total_file_len);
+		snprintf(buf, MAXLEN,
+			 "BYE File/Dir/Link: %zu/%zu/%zu UploadBytes/TotalBytes: %zu/%zu\n",
+			 total_files, total_dirs, total_links, upload_file_len, total_file_len);
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 		exit(0);
 	}
 
@@ -203,7 +205,7 @@ void ProcessFile(int fd)
 		total_dirs++;
 		p = buf + 6;
 		if (debug)
-			fprintf(stderr, "C->S %s ", buf);
+			printf("C->S %s ", buf);
 		url_decode(p);
 		snprintf(str, MAXLEN, "/data/%s", p);
 		if (stat(str, &stbuf) == 0) {
@@ -211,20 +213,20 @@ void ProcessFile(int fd)
 				strcpy(buf, "OK mkdir, dir in server\n");
 				Writen(fd, buf, strlen(buf));
 				if (debug)
-					fprintf(stderr, "%s", buf);
+					printf("%s", buf);
 				return;
 			}
 			strcpy(buf, "ERROR mkdir, name exists, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "%s", buf);
+				printf("%s", buf);
 			exit(-1);
 		}
 		create_dir(str);
 		strcpy(buf, "OK mkdir\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 		return;
 	}
 
@@ -233,13 +235,13 @@ void ProcessFile(int fd)
 		struct stat stbuf;
 		total_links++;
 		if (debug)
-			fprintf(stderr, "C->S %s ", buf);
+			printf("C->S %s ", buf);
 		p = buf + 7;
 		while (*p && (*p != ' '))
 			p++;
 		if (*p == 0) {	// 
 			if (debug)
-				fprintf(stderr, "%s error\n", buf);
+				printf("%s error\n", buf);
 			exit(-1);
 		}
 		*p = 0;
@@ -253,13 +255,13 @@ void ProcessFile(int fd)
 				strcpy(buf, "OK mklink, link in server\n");
 				Writen(fd, buf, strlen(buf));
 				if (debug)
-					fprintf(stderr, "%s", buf);
+					printf("%s", buf);
 				return;
 			}
 			strcpy(buf, "ERROR mklink, name exists, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "%s", buf);
+				printf("%s", buf);
 			exit(-1);
 		}
 		check_and_create_dir(strnew);
@@ -267,12 +269,12 @@ void ProcessFile(int fd)
 			strcpy(buf, "OK mklink\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "%s", buf);
+				printf("%s", buf);
 		} else {
 			strcpy(buf, "ERROR mklink, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "%s", buf);
+				printf("%s", buf);
 			exit(-1);
 		}
 		return;
@@ -283,7 +285,7 @@ void ProcessFile(int fd)
 		strcpy(buf, "ERROR unknow cmd, exit\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 		exit(-1);
 	}
 	total_files++;
@@ -294,7 +296,7 @@ void ProcessFile(int fd)
 		p++;
 	if (*p == 0) {		// no file_len 
 		if (debug)
-			fprintf(stderr, "%s error\n", buf);
+			printf("%s error\n", buf);
 		exit(-1);
 	}
 	*p = 0;
@@ -303,7 +305,7 @@ void ProcessFile(int fd)
 		p--;
 		*p = ' ';
 		if (debug)
-			fprintf(stderr, "%s md5sum len error\n", buf);
+			printf("%s md5sum len error, exit\n", buf);
 		exit(-1);
 	}
 	strcpy(md5sum, buf + 5);
@@ -311,7 +313,7 @@ void ProcessFile(int fd)
 		p--;
 		*p = ' ';
 		if (debug)
-			fprintf(stderr, "%s file len error\n", buf);
+			printf("%s file len error, exit\n", buf);
 		exit(-1);
 	}
 	total_file_len += file_len;
@@ -319,26 +321,26 @@ void ProcessFile(int fd)
 		p++;
 	if (*p == 0) {		// no file name
 		if (debug)
-			fprintf(stderr, "no file name\n");
+			printf("no file name, exit\n");
 		exit(-1);
 	}
 	p++;
 	if (*p == 0) {		// no file name
 		if (debug)
-			fprintf(stderr, "no file name\n");
+			printf("no file name, exit\n");
 		exit(-1);
 	}
 	while (*p && *p == '/')
 		p++;
 	if (*p == 0) {		// no file name
 		if (debug)
-			fprintf(stderr, "no file name\n");
+			printf("no file name, exit\n");
 		exit(-1);
 	}
 	url_decode(p);
 	snprintf(file_name, MAXLEN, "/data/%s", p);
 	if (debug)
-		fprintf(stderr, "C->S FILE %s %zu %s ", md5sum, file_len, file_name);
+		printf("C->S FILE %s %zu %s ", md5sum, file_len, file_name);
 
 	struct stat stbuf;
 	strcpy(hashed_file, get_hashed_file_name(md5sum, file_len));
@@ -348,12 +350,14 @@ void ProcessFile(int fd)
 			if (stbuf.st_ino == stbuf_hashed.st_ino)	// the same file
 				strcpy(buf, "OK same file in server\n");
 			else
-				strcpy(buf, "ERROR file exists, but not the same md5sum\n");
+				strcpy(buf,
+				       "ERROR file exists, but not the same md5sum, maybe you are overwrite file\n");
 		} else
-			strcpy(buf, "ERROR file exists, hashed file not exists\n");
+			strcpy(buf,
+			       "ERROR file exists, hashed file not exists, maybe you are overwirting file\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 		return;
 	}
 	if (access(hashed_file, F_OK) != 0)	// hashed file not exists, recv it
@@ -367,14 +371,14 @@ void ProcessFile(int fd)
 		strcpy(buf, "OK file in server\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 		return;
 	}
 
 	snprintf(buf, 100, "ERROR link file error %d, exit\n", errno);
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "%s", buf);
+		printf("%s", buf);
 	exit(-1);
 }
 
@@ -405,10 +409,10 @@ void Process(int fd)
 			continue;
 		fp = fopen(config_file, "r");
 		if (fp == NULL) {
-			strcpy(buf, "ERROR open config file\n");
+			strcpy(buf, "ERROR open config file, exit\n");
 			Writen(fd, buf, strlen(buf));
 			if (debug)
-				fprintf(stderr, "%s", buf);
+				printf("%s", buf);
 			exit(-1);
 		}
 		while (fgets(file_buf, MAXLEN, fp)) {
@@ -429,13 +433,13 @@ void Process(int fd)
 					p++;
 
 				if (debug)
-					fprintf(stderr, "password ok, work_dir is %s\n", p);
+					printf("password ok, work_dir is %s\n", p);
 				if (chroot(p) != 0) {
 					perror("chroot");
-					snprintf(buf, MAXLEN, "ERROR chroot to %s\n", p);
+					snprintf(buf, MAXLEN, "ERROR chroot to %s, exit\n", p);
 					Writen(fd, buf, strlen(buf));
 					if (debug)
-						fprintf(stderr, "%s", buf);
+						printf("%s", buf);
 					exit(-1);
 				}
 				setuid(work_uid);
@@ -449,12 +453,12 @@ void Process(int fd)
 		strcpy(buf, "ERROR password\n");
 		Writen(fd, buf, strlen(buf));
 		if (debug)
-			fprintf(stderr, "%s", buf);
+			printf("%s", buf);
 	}
 	strcpy(buf, "OK password ok\n");
 	Writen(fd, buf, strlen(buf));
 	if (debug)
-		fprintf(stderr, "%s", buf);
+		printf("%s", buf);
 
 	while (1)
 		ProcessFile(fd);
@@ -463,7 +467,7 @@ void Process(int fd)
 void usage(void)
 {
 	printf("Usage:\n");
-	printf("./translog_server -p port -f config_file [ -u user_name ] [ -6 ] [ -d ]\n");
+	printf("./hbackup_server -p port -f config_file [ -u user_name ] [ -6 ] [ -d ]\n");
 	printf(" options:\n");
 	printf("    -p port\n");
 	printf("    -f config_file\n");
@@ -500,7 +504,7 @@ int main(int argc, char *argv[])
 			if (pw)
 				work_uid = pw->pw_uid;
 			else {
-				fprintf(stderr, "user %s not found\n", work_user);
+				printf("user %s not found\n", work_user);
 				exit(-1);
 			}
 			break;
@@ -545,7 +549,7 @@ int main(int argc, char *argv[])
 		int infd;
 		int pid;
 		if (debug)
-			fprintf(stderr, "%s", "waiting client..\n");
+			printf("%s", "waiting client..\n");
 		infd = accept(listenfd, NULL, 0);
 		if (infd < 0)
 			continue;
