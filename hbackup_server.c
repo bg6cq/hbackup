@@ -389,6 +389,23 @@ void Process(int fd)
 	int n;
 	int pass_ok;
 
+	int optval = 1;
+	socklen_t optlen = sizeof(optval);
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void *)&optval, optlen);
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void *)&optval, optlen);
+
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen);
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen);
+	optval = 3;
+	setsockopt(fd, SOL_TCP, TCP_KEEPCNT, &optval, optlen);
+	setsockopt(fd, SOL_TCP, TCP_KEEPCNT, &optval, optlen);
+	optval = 120;
+	setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &optval, optlen);
+	setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &optval, optlen);
+	optval = 5;
+	setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, &optval, optlen);
+	setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, &optval, optlen);
+
 //      password check
 // C -> PASS pasword
 // S    open config_file.txt read password and work_dir, chroot(work_dir), setuid(work_uid)
