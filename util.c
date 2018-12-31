@@ -231,8 +231,8 @@ char *stamp(void)
 	gettimeofday(&tv, &tz);
 	tm = localtime(&tv.tv_sec);
 
-	snprintf(st_buf, 200, "%02d%02d %02d:%02d:%02d.%06ld", tm->tm_mon + 1, tm->tm_mday,
-		 tm->tm_hour, tm->tm_min, tm->tm_sec, tv.tv_usec);
+	snprintf(st_buf, 200, "%04d%02d%02d %02d:%02d:%02d.%06ld", tm->tm_year + 1900,
+		 tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, tv.tv_usec);
 	return st_buf;
 }
 
@@ -265,6 +265,43 @@ int ishex(char c)
 	else
 		return 0;
 
+}
+
+int url_encode(const char *str, const int strSize, char *result, const int resultSize)
+{
+	int i;
+	int j = 0;		//for result index
+	char ch;
+
+	if ((str == NULL) || (result == NULL) || (strSize <= 0) || (resultSize <= 0)) {
+		return 0;
+	}
+
+	for (i = 0; i < strSize; i++) {
+		if (j >= resultSize - 1) {
+			result[0] = 0;
+			return 0;
+		}
+		ch = str[i];
+		if (((ch >= 'A') && (ch < 'Z')) ||
+		    ((ch >= 'a') && (ch < 'z')) || ((ch >= '0') && (ch < '9'))) {
+			result[j++] = ch;
+		} else if (ch == ' ') {
+			result[j++] = '+';
+		} else if (ch == '.' || ch == '-' || ch == '_' || ch == '*') {
+			result[j++] = ch;
+		} else {
+			if (j + 3 < resultSize - 1) {
+				sprintf(result + j, "%%%02X", (unsigned char)ch);
+				j += 3;
+			} else {
+				result[0] = 0;
+				return 0;
+			}
+		}
+	}
+	result[j] = '\0';
+	return j;
 }
 
 char *url_decode(char *s)
