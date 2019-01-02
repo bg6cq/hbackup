@@ -1,5 +1,5 @@
 Name:              hbackup
-Version:           1.0
+Version:           1.1
 Release:           1%{?dist}
 
 Summary:           A hashed file backup program
@@ -37,6 +37,9 @@ install -p -D -m 0755 hbackup/hbackup \
 %{_bindir}/hbackup
 
 %changelog
+* Wed Jan 02 2019 Zhang Huanjie <james@ustc.edu.cn> - 1.1
+- fix empty dirs in backup server
+
 * Mon Dec 31 2018 Zhang Huanjie <james@ustc.edu.cn> - 1.0
 - first release
 

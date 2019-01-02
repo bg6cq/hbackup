@@ -466,14 +466,14 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 			}
 			lpath[n] = 0;
 			printf("%s LINK\n", lfile_name);
-			snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, direntp->d_name);
+			snprintf(buf, PATH_MAX, "%s/%s", remote_dir, direntp->d_name);
 			send_link(fd, buf, lpath);
 		} else if (S_ISREG(st.st_mode)) {
 			char buf[PATH_MAX];
 			if (debug)
 				printf("FILE %s\n", lfile_name);
 			printf("%s\n", lfile_name);
-			snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, lfile_name);
+			snprintf(buf, PATH_MAX, "%s/%s", remote_dir, direntp->d_name);
 			send_file(fd, lfile_name, buf);
 		} else
 			printf("%s SKIP\n", lfile_name);
@@ -507,7 +507,8 @@ void end_backup(int fd)
 }
 
 void usage(void)
-{	printf("Version: %s\n", VERSION);
+{
+	printf("Version: %s\n", VERSION);
 	printf("Usage:\n");
 	printf("./hbackup [ -d ] [ -e err_log_file ] \n"
 	       "           [ -m md5cache.txt ] HostName Port Password File/DirToSend RemoteName\n");
