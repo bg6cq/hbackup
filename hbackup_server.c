@@ -547,7 +547,7 @@ int main(int argc, char *argv[])
 
 	signal(SIGCHLD, SIG_IGN);
 	if (debug == 0) {
-		daemon_init("translog_server", LOG_DAEMON);
+		daemon_init("hbackup_server", LOG_DAEMON);
 		umask(022);
 		while (1) {
 			int pid;
