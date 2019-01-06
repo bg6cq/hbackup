@@ -60,6 +60,18 @@ Usage: python3 hbackup.py [ -e err.log ] [ -x exclude_file_regex ] [ -t n ] [ -m
 
 ```
 
+有C版本的客户端，命令行是:
+```
+./hbackup
+Usage: hbackup [ -e err.log ] [ -m md5sum_cache_file ] [ -d ] HostName PortNumber Password File/DirToSend new_name
+
+* 如果带有参数`-e err.log`，出现备份时错误时，会将未备份的文件信息记录在文件`err.log`，并继续其他文件的备份。
+* 如果不带参数`-e err.log`，出现错误立即停止后续备份过程。
+* -m md5sum_cache_file, 指明一个存放md5sum信息的缓存文件，第一次使用请先创建空文件。如果某个文件的最后修改时间不变，直接使用缓存文件中记录的md5sum，省去读文件计算md5sum开销，大大减少I/O操作。如果需要重算md5sum，只要将该文件清空即可。
+* 最后的可选参数是服务器上的目录名，每次备份可以使用不同的名字区分。
+
+```
+
 ## 工作原理
 
 系统工作的前提：不存在同样长度的文件，它们的md5sum相同。
