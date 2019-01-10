@@ -37,7 +37,7 @@ if not os.path.isdir(hashed_dir):
 for root, dirs, files in os.walk(hashed_dir, topdown=True):
     for name in files:
         file_name = os.path.join(root, name)
-        print file_name
+        sys.stdout.write(file_name)
         if name[32:33] != '_':
             print " " + file_name + " ERROR invalid file name"
             continue
