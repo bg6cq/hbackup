@@ -79,7 +79,7 @@ void update_md5sum_cache(char *name, time_t ft, char *md5s)
 	p = malloc(strlen(name) + 1);
 	if (p == NULL) {
 		printf("malloc error\n");
-		exit(0);
+		exit(-1);
 	}
 	strcpy(p, name);
 	s->filename = p;
@@ -200,7 +200,7 @@ void log_err(const char *fmt, ...)
 	} else {
 		vprintf(fmt, ap);
 		va_end(ap);
-		exit(0);
+		exit(-1);
 	}
 }
 
@@ -250,14 +250,14 @@ int SendPass(int fd, char *pass)
 	buf[n] = 0;
 	if (n == 0) {
 		printf("read 0, exit\n");
-		exit(0);
+		exit(-1);
 	}
 	if (debug)
 		printf("S: %s", buf);
 	if (memcmp(buf, "OK", 2) == 0)
 		return 0;
 	printf("Got %s, exit\n", buf);
-	exit(0);
+	exit(-1);
 }
 
 void send_dir(int fd, char *remote_name)
@@ -269,7 +269,7 @@ void send_dir(int fd, char *remote_name)
 	n = url_encode(remote_name, strlen(remote_name), buf + 6, MAXLEN - 7);
 	if (n == 0) {
 		printf("error when url_encode %s\n", remote_name);
-		exit(0);
+		exit(-1);
 	}
 	buf[6 + n] = '\n';
 	buf[6 + n + 1] = 0;
@@ -281,7 +281,7 @@ void send_dir(int fd, char *remote_name)
 	buf[n] = 0;
 	if (n == 0) {
 		printf("read 0, exit\n");
-		exit(0);
+		exit(-1);
 	}
 	if (debug)
 		printf("S: %s", buf);
@@ -300,14 +300,14 @@ void send_link(int fd, char *remote_name, char *linkto)
 	n1 = url_encode(remote_name, strlen(remote_name), buf + 7, MAXLEN - 8);
 	if (n1 == 0) {
 		printf("error when url_encode %s\n", remote_name);
-		exit(0);
+		exit(-1);
 	}
 	buf[7 + n1] = ' ';
 	n1++;
 	n2 = url_encode(linkto, strlen(linkto), buf + n1 + 7, MAXLEN - 8 - n1);
 	if (n2 == 0) {
 		printf("error when url_encode %s\n", linkto);
-		exit(0);
+		exit(-1);
 	}
 
 	buf[7 + n1 + n2] = '\n';
@@ -319,7 +319,7 @@ void send_link(int fd, char *remote_name, char *linkto)
 	buf[n] = 0;
 	if (n == 0) {
 		printf("read 0, exit\n");
-		exit(0);
+		exit(-1);
 	}
 	if (debug)
 		printf("S: %s", buf);
@@ -350,7 +350,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	n2 = url_encode(remote_name, strlen(remote_name), buf + n1, MAXLEN - n1 - 1);
 	if (n2 == 0) {
 		printf("error when url_encode %s\n", remote_name);
-		exit(0);
+		exit(-1);
 	}
 	buf[n1 + n2] = '\n';
 	buf[n1 + n2 + 1] = 0;
@@ -362,7 +362,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	buf[n] = 0;
 	if (n == 0) {
 		printf("read 0, exit\n");
-		exit(0);
+		exit(-1);
 	}
 	if (debug)
 		printf("S: %s", buf);
@@ -374,7 +374,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	}
 	if (memcmp(buf, "DATA", 4) != 0) {
 		printf("S: %s", buf);
-		exit(0);
+		exit(-1);
 	}
 
 	if (debug)
@@ -384,7 +384,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	fp = fopen(local_file_name, "r");
 	if (fp == NULL) {
 		printf("open file error: %s\n", local_file_name);
-		exit(0);
+		exit(-1);
 	}
 	size_t bytes_send = 0;
 
@@ -410,7 +410,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 	buf[n] = 0;
 	if (n == 0) {
 		printf("read 0, exit\n");
-		exit(0);
+		exit(-1);
 	}
 	if (debug)
 		printf("S: %s", buf);
@@ -422,7 +422,7 @@ void send_file(int fd, char *local_file_name, char *remote_name)
 		return;
 	}
 	printf("S: %s", buf);
-	exit(0);
+	exit(-1);
 }
 
 void send_whole_dir(int fd, char *dir, char *remote_dir)
@@ -432,7 +432,7 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 	dirp = opendir(dir);
 	if (dirp == NULL) {
 		printf("opendir error %s\n", dir);
-		exit(0);
+		exit(-1);
 	}
 	while ((direntp = readdir(dirp)) != NULL) {
 		struct stat st;
@@ -444,7 +444,7 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 		snprintf(lfile_name, PATH_MAX, "%s/%s", dir, direntp->d_name);
 		if (lstat(lfile_name, &st) != 0) {
 			printf("lstat error: %s\n", lfile_name);
-			exit(0);
+			exit(-1);
 		}
 		if (S_ISDIR(st.st_mode)) {
 			char buf[PATH_MAX];
@@ -462,7 +462,7 @@ void send_whole_dir(int fd, char *dir, char *remote_dir)
 			n = readlink(lfile_name, lpath, PATH_MAX - 1);
 			if (n == -1) {
 				printf("readlink error %s\n", lfile_name);
-				exit(0);
+				exit(-1);
 			}
 			lpath[n] = 0;
 			printf("%s LINK\n", lfile_name);
@@ -491,7 +491,7 @@ void end_backup(int fd)
 	buf[n] = 0;
 	if (n == 0) {
 		printf("read 0, exit\n");
-		exit(0);
+		exit(-1);
 	}
 	printf("End of backup, S: %s", buf);
 
@@ -504,6 +504,7 @@ void end_backup(int fd)
 		printf("Encountered error when backuping file\n");
 		printf("Error msg append to %s, please check it\n", error_log_file);
 	}
+	exit(haserror);
 }
 
 void usage(void)
@@ -520,7 +521,7 @@ void usage(void)
 	    ("    -m md5cache.txt md5sum_cache will be used if the file\'s mtime does not change.\n");
 	printf("                    md5sum_cache_file must be created before use\n");
 	printf("\n");
-	exit(0);
+	exit(-1);
 }
 
 int main(int argc, char *argv[])
@@ -570,7 +571,7 @@ int main(int argc, char *argv[])
 		md5cache_fp = fopen(md5cache_file, "r+");
 		if (md5cache_fp == NULL) {
 			printf("open file %s error, exit\n", md5cache_file);
-			exit(0);
+			exit(-1);
 		}
 		load_md5sum_cache();
 	}
@@ -578,7 +579,7 @@ int main(int argc, char *argv[])
 		error_log_fp = fopen(error_log_file, "a");
 		if (error_log_fp == NULL) {
 			printf("open error log file %s error, exit\n", error_log_file);
-			exit(0);
+			exit(-1);
 		}
 	}
 	fd = tcp_connect(argv[optind], argv[optind + 1]);
@@ -587,7 +588,7 @@ int main(int argc, char *argv[])
 	struct stat st;
 	if (lstat(local_file_name, &st) != 0) {
 		printf("lstat error: %s\n", local_file_name);
-		exit(0);
+		exit(-1);
 	}
 	if (S_ISDIR(st.st_mode)) {
 		if (debug)
@@ -595,7 +596,7 @@ int main(int argc, char *argv[])
 		printf("%s\n", local_file_name);
 		send_whole_dir(fd, local_file_name, remote_file_name);
 		end_backup(fd);
-		exit(0);
+		exit(haserror);
 	} else if (S_ISLNK(st.st_mode)) {
 		char buf[PATH_MAX], lpath[PATH_MAX];
 		int n;
@@ -604,13 +605,13 @@ int main(int argc, char *argv[])
 		n = readlink(local_file_name, lpath, PATH_MAX - 1);
 		if (n == -1) {
 			printf("readlink error %s\n", local_file_name);
-			exit(0);
+			exit(-1);
 		}
 		lpath[n] = 0;
 		printf("%s LINK\n", local_file_name);
 		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
 		send_link(fd, buf, lpath);
-		exit(0);
+		exit(haserror);
 	} else if (S_ISREG(st.st_mode)) {
 		char buf[PATH_MAX];
 		if (debug)
@@ -618,9 +619,9 @@ int main(int argc, char *argv[])
 		printf("%s\n", local_file_name);
 		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
 		send_file(fd, local_file_name, buf);
-		exit(0);
+		exit(haserror);
 	} else {
 		printf("%s SKIP\n", local_file_name);
 	}
-	exit(0);
+	exit(-1);
 }
