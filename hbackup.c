@@ -233,6 +233,12 @@ int tcp_connect(const char *host, const char *serv)
 
 	freeaddrinfo(ressave);
 
+	struct timeval timeout;
+	timeout.tv_sec = 1200;
+	timeout.tv_usec = 0;
+	setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
 	return (sockfd);
 }
 
