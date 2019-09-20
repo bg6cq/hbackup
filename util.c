@@ -283,8 +283,8 @@ int url_encode(const char *str, const int strSize, char *result, const int resul
 			return 0;
 		}
 		ch = str[i];
-		if (((ch >= 'A') && (ch < 'Z')) ||
-		    ((ch >= 'a') && (ch < 'z')) || ((ch >= '0') && (ch < '9'))) {
+		if (((ch >= 'A') && (ch <= 'Z')) ||
+		    ((ch >= 'a') && (ch <= 'z')) || ((ch >= '0') && (ch <= '9'))) {
 			result[j++] = ch;
 		} else if (ch == ' ') {
 			result[j++] = '+';
