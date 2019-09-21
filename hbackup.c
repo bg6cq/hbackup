@@ -615,7 +615,7 @@ int main(int argc, char *argv[])
 		}
 		lpath[n] = 0;
 		printf("%s LINK\n", local_file_name);
-		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
+		snprintf(buf, PATH_MAX, "%s", remote_file_name);
 		send_link(fd, buf, lpath);
 		exit(haserror);
 	} else if (S_ISREG(st.st_mode)) {
@@ -623,7 +623,7 @@ int main(int argc, char *argv[])
 		if (debug)
 			printf("FILE %s\n", local_file_name);
 		printf("%s\n", local_file_name);
-		snprintf(buf, PATH_MAX, "%s/%s", remote_file_name, basename(local_file_name));
+		snprintf(buf, PATH_MAX, "%s", remote_file_name);
 		send_file(fd, local_file_name, buf);
 		exit(haserror);
 	} else {
