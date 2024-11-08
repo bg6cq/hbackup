@@ -37,14 +37,14 @@
 
 #include "util.c"
 
-char md5cache_file[PATH_MAX];
+char md5cache_file[PATH_MAX + 1];
 FILE *md5cache_fp;
 
-char error_log_file[PATH_MAX];
+char error_log_file[PATH_MAX + 1];
 FILE *error_log_fp;
 
-char local_file_name[PATH_MAX];
-char remote_file_name[PATH_MAX];
+char local_file_name[PATH_MAX + 1];
+char remote_file_name[PATH_MAX + 1];
 
 int haserror = 0;
 size_t total_files, total_dirs, total_links, skipped_files, total_file_len, upload_file_len;
@@ -73,6 +73,7 @@ void update_md5sum_cache(char *name, time_t ft, char *md5s)
 		s->filetime = ft;
 		s->used = 1;
 		strncpy(s->md5s, md5s, MD5_DIGEST_LENGTH * 2);
+		s->md5s[MD5_DIGEST_LENGTH * 2] = 0;
 		return;
 	}
 	s = (struct my_struct *)malloc(sizeof(struct my_struct));
@@ -86,6 +87,7 @@ void update_md5sum_cache(char *name, time_t ft, char *md5s)
 	s->filetime = ft;
 	s->used = 1;
 	strncpy(s->md5s, md5s, MD5_DIGEST_LENGTH * 2);
+	s->md5s[MD5_DIGEST_LENGTH * 2] = 0;
 	HASH_ADD_KEYPTR(hh, md5sum_cache, s->filename, strlen(s->filename), s);
 	if (debug)
 		printf("add md5sum_cache %lu %s %s\n", ft, md5s, name);
@@ -542,9 +544,11 @@ int main(int argc, char *argv[])
 			break;
 		case 'e':
 			strncpy(error_log_file, optarg, PATH_MAX);
+			error_log_file[PATH_MAX] = 0;
 			break;
 		case 'm':
 			strncpy(md5cache_file, optarg, PATH_MAX);
+			md5cache_file[PATH_MAX] = 0;
 			break;
 		}
 
@@ -552,7 +556,9 @@ int main(int argc, char *argv[])
 		usage();
 
 	strncpy(local_file_name, argv[optind + 3], PATH_MAX);
+	local_file_name[PATH_MAX] = 0;
 	strncpy(remote_file_name, argv[optind + 4], PATH_MAX);
+	remote_file_name[PATH_MAX] = 0;
 
 	while (strlen(local_file_name) > 0 && local_file_name[strlen(local_file_name) - 1] == '/')
 		local_file_name[strlen(local_file_name) - 1] = 0;
@@ -615,8 +621,9 @@ int main(int argc, char *argv[])
 		}
 		lpath[n] = 0;
 		printf("%s LINK\n", local_file_name);
-		if (remote_file_name[strlen(remote_file_name)-1] == '/')
-			snprintf(buf, PATH_MAX, "%s%s", remote_file_name, basename(local_file_name));
+		if (remote_file_name[strlen(remote_file_name) - 1] == '/')
+			snprintf(buf, PATH_MAX, "%s%s", remote_file_name,
+				 basename(local_file_name));
 		else
 			snprintf(buf, PATH_MAX, "%s", remote_file_name);
 		send_link(fd, buf, lpath);
@@ -626,8 +633,9 @@ int main(int argc, char *argv[])
 		if (debug)
 			printf("FILE %s\n", local_file_name);
 		printf("%s\n", local_file_name);
-		if (remote_file_name[strlen(remote_file_name)-1] == '/')
-			snprintf(buf, PATH_MAX, "%s%s", remote_file_name, basename(local_file_name));
+		if (remote_file_name[strlen(remote_file_name) - 1] == '/')
+			snprintf(buf, PATH_MAX, "%s%s", remote_file_name,
+				 basename(local_file_name));
 		else
 			snprintf(buf, PATH_MAX, "%s", remote_file_name);
 		send_file(fd, local_file_name, buf);

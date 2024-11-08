@@ -515,9 +515,12 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			strncpy(config_file, optarg, MAXLEN - 1);
+			config_file[MAXLEN - 1] = 0;
 			break;
 		case 'u':
 			strncpy(work_user, optarg, MAXLEN - 1);
+			work_user[MAXLEN - 1] = 0;
+			break;
 			pw = getpwnam(work_user);
 			if (pw)
 				work_uid = pw->pw_uid;

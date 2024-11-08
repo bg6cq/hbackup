@@ -334,7 +334,8 @@ void create_dir(char *dir_name)
 {
 	char str[MAXLEN];
 	int i, len;
-	strncpy(str, dir_name, MAXLEN);
+	strncpy(str, dir_name, MAXLEN - 1);
+	str[MAXLEN - 1] = 0;
 	len = strlen(str);
 	for (i = 0; i < len; i++) {
 		if ((str[i] == '/') && (i != 0)) {
@@ -359,7 +360,8 @@ void check_and_create_dir(char *file_name)
 	if (strchr(file_name, '/')) {	// file_name has directory, check and mkdir 
 		char str[MAXLEN];
 		int i, len;
-		strncpy(str, file_name, MAXLEN);
+		strncpy(str, file_name, MAXLEN - 1);
+		str[MAXLEN - 1] = 0;
 		len = strlen(str);
 		// find the last '/'
 		for (i = len - 1; i >= 0; i--)
