@@ -485,7 +485,7 @@ void usage(void)
 {
 	printf("Version: %s\n", VERSION);
 	printf("Usage:\n");
-	printf("./hbackup_server -p port -f config_file [ -u user_name ] [ -6 ] [ -d ]\n");
+	printf("./hbackup_server -p port -f config_file -u user_name [ -6 ] [ -d ]\n");
 	printf(" options:\n");
 	printf("    -p port\n");
 	printf("    -f config_file\n");
@@ -520,7 +520,6 @@ int main(int argc, char *argv[])
 		case 'u':
 			strncpy(work_user, optarg, MAXLEN - 1);
 			work_user[MAXLEN - 1] = 0;
-			break;
 			pw = getpwnam(work_user);
 			if (pw)
 				work_uid = pw->pw_uid;
