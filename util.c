@@ -1,5 +1,6 @@
 #define MAXLEN 		16384
 #define MAXLINE 	1024*1024
+#define MD5_DIGEST_LENGTH 16
 
 int daemon_proc;		/* set nonzero by daemon_init() */
 int debug = 0;
@@ -7,26 +8,41 @@ int debug = 0;
 char *get_file_md5sum(char *file_name)
 {
 	FILE *fp;
-	MD5_CTX c;
+	EVP_MD_CTX *c;
 	char buf[MAXLINE];
 	int n;
 	ssize_t bytes;
+	unsigned int md5_len;
 	unsigned char out[MD5_DIGEST_LENGTH];
 	static char outhex[MD5_DIGEST_LENGTH * 2 + 1];
 
 	outhex[0] = 0;
-	MD5_Init(&c);
-	fp = fopen(file_name, "r");
-	if (fp == NULL)
+	c = EVP_MD_CTX_new();
+	if (c == NULL) {
+		if (debug)
+			fprintf(stderr, "EVP_MD_CTX_new error\n");
 		return outhex;
+	}
+	if (EVP_DigestInit_ex(c, EVP_md5(), NULL) != 1) {
+		if (debug)
+			fprintf(stderr, "EVP_DigestInit_ex error\n");
+		EVP_MD_CTX_free(c);
+		return outhex;
+	}
+	fp = fopen(file_name, "r");
+	if (fp == NULL) {
+		EVP_MD_CTX_free(c);
+		return outhex;
+	}
 
 	bytes = fread(buf, 1, MAXLINE, fp);
 	while (bytes > 0) {
-		MD5_Update(&c, buf, bytes);
+		EVP_DigestUpdate(c, buf, bytes);
 		bytes = fread(buf, 1, MAXLINE, fp);
 	}
 	fclose(fp);
-	MD5_Final(out, &c);
+	EVP_DigestFinal_ex(c, out, &md5_len);
+	EVP_MD_CTX_free(c);
 	for (n = 0; n < MD5_DIGEST_LENGTH; n++) {
 		snprintf(outhex + n * 2, 3, "%02x", out[n]);
 	}

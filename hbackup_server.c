@@ -28,7 +28,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <openssl/md5.h>
+#include <openssl/evp.h>
 
 #include "util.c"
 
