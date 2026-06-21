@@ -59,9 +59,14 @@ void err_doit(int errnoflag, int level, const char *fmt, va_list ap)
 	errno_save = errno;	/* value caller might want printed */
 	vsnprintf(buf, sizeof(buf), fmt, ap);	/* this is safe */
 	n = strlen(buf);
-	if (errnoflag)
+	if (errnoflag) {
 		snprintf(buf + n, sizeof(buf) - n, ": %s", strerror(errno_save));
-	strcat(buf, "\n");
+		n = strlen(buf);
+	}
+	if (n < sizeof(buf) - 1) {
+		buf[n] = '\n';
+		buf[n + 1] = '\0';
+	}
 
 	if (daemon_proc)
 		syslog(level, "%s", buf);
